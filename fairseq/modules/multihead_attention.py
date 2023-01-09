@@ -82,10 +82,6 @@ class SynthesizerDenseEinsumMH(nn.Module):
 
         TODO best style: seq_len, batch, head, ...; this is due to gains by looping through tokens when decoding
         '''
-        '''
-        Tasks remaining:
-        > Port to MHA.py
-        '''
         super(SynthesizerDenseEinsumMH, self).__init__() # ASK why not super().__init()__
 
         # Calculate dimension per head
@@ -95,12 +91,12 @@ class SynthesizerDenseEinsumMH(nn.Module):
         print(f'AR SynthDense Init')
         print(f'  head_dim: {head_dim}') # 64
         print(f'  in_dims: {in_dims}') # 512
-        print(f'  sentence_len: {sentence_length}') # 1024 for max seq len # 512 TODO check
+        print(f'  sentence_len: {sentence_length}') # 2048 --max-tokens
         print(f'  heads: {heads}') # 8
-        # TODO check rearrangement to match fairseq
-        ''' Only used for reshaping the output '''
-        self.seq_len = sentence_length
-        self.in_dims = in_dims
+
+        # ''' Only used for reshaping the output '''
+        # self.seq_len = sentence_length
+        # self.in_dims = in_dims
 
         ''' Weights and Biases for Linear Layers '''
         self.w0 = Parameter(xavier_uniform_(empty(heads, in_dims, sentence_length,)))  # Linear 1 weights 
@@ -120,20 +116,16 @@ class SynthesizerDenseEinsumMH(nn.Module):
         '''
         Synthesizer Dense Energy implementation with einsum. Multihead support.
         Parameters:
-            x: Tensor (Batch, sequence length, dimension of token representation)
+            x: Tensor (sequence length, batch size, dimension of token repr)
         Output score (how likely a word corresponds to other words) matrix.
         '''       
         print(f'Inside get_energy_dense()')     
         print(f'  x shape: {x.shape}') 
-
-        # TODO idea, reshape input into the shape I expected while writing this?
-        # What should the reshape look like, it seems input is given as [32, 512, 64], [unclear, in_dims, head_dim]
-        # > 32 * 64 = 2048, perhaps tied to max seq len 2048?
-
         print(f'  w0 shape: {self.w0.shape}')
         
         # Linear projection 1
-        projectedReprOfTokens = torch.einsum('bsd,hdt->bhst', x, self.w0) + self.b0  # x same for all heads
+        projectedReprOfTokens = torch.einsum('sbd,hdt->bhst', x, self.w0) + self.b0  # x same for all heads
+        # changed above line when matching Fairseq inputs
         filteredRepOfTokens = torch.nn.functional.relu(projectedReprOfTokens)
         print(f'  fRep shape: {filteredRepOfTokens.shape}')
         print(f'  w1 shape: {self.w1.shape}') 
@@ -146,19 +138,23 @@ class SynthesizerDenseEinsumMH(nn.Module):
 
     def forward(self, x): 
         '''
-        Translating Fairseq's terminology for the shape of x [time, batch, channel] to terminology used by synth init
-            "time" = seq len
-            "batch" = batch size (TODO validate)
-            "channel" = embed dim
+        Parameters:
+            x: Tensor (sequence length, batch size, dimension of token representation)
+        Return energy, value.
+        Assume that MHA.py will reuse softmax and masking machinery for Synth and regular attention.
+
+        Fairseq's x [time, batch, channel] is [seq len, batch size, embed dim]. x looks like sbd
         '''
+        # TODO do we need to pad with zeros to match up to max-tokens? If errors, try this
+
         energy = self.get_energy_dense(x) 
         # attention = self.softmax(energy)  
 
         print(f'value_w shape: {self.value_w.shape}')
         print(f'value_b shape: {self.value_b.shape}')
 
-        value = torch.einsum('bsd,hde->bhse', x, self.value_w) #+ self.value_b # Expect output [12/2]: (num_heads, head_dim)
-        # # TODO debug adding bias here. This operation is invalid <paste error>. 
+        value = torch.einsum('sbd,hde->bhse', x, self.value_w) #+ self.value_b # Expect output [12/2]: (num_heads, head_dim)
+        # [1/9/2023] Add bias error: size of tensor a (512) must match size of tensor b (8) at non-singleton dimension 2.
 
         print(f'energy shape: {energy.shape}')
         # print(f'attention shape: {attention.shape}')
@@ -647,17 +643,18 @@ class MultiheadAttention(FairseqIncrementalDecoder):
 
 
             """
-            Debug Jan 6
+            Debug Jan 9
+
             DB 635| key.shape: torch.Size([512, 4, 512])
             Inside get_energy_dense()
-            x shape: torch.Size([512, 4, 512])
-            w0 shape: torch.Size([8, 512, 2048])
-            fRep shape: torch.Size([512, 8, 4, 2048])
-            w1 shape: torch.Size([8, 2048, 2048])
-            energy shape: torch.Size([512, 8, 4, 2048])
+                x shape: torch.Size([512, 4, 512])
+                w0 shape: torch.Size([8, 512, 2048])
+                fRep shape: torch.Size([4, 8, 512, 2048])
+                w1 shape: torch.Size([8, 2048, 2048])
+                energy shape: torch.Size([4, 8, 512, 2048])
             value_w shape: torch.Size([8, 512, 64])
             value_b shape: torch.Size([8, 64])
-            energy shape: torch.Size([512, 8, 4, 2048])
+            energy shape: torch.Size([4, 8, 512, 2048])
             """
 
 
