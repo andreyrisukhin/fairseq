@@ -10,6 +10,8 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.nn import Parameter
+from torch.distributions import Uniform # Andrey added for einsum synth weight init
+
 
 try:
     from xformers.components.attention import build_attention
@@ -59,14 +61,15 @@ def _mask_for_xformers(mask: Tensor, to_dtype: Optional[torch.dtype] = None):
     mask = mask.to(to_dtype)
     return mask
 
-# TODO more fairseq-like style imports? Added by Andrey for synthesizer.
+# AR Added
 from torch.nn.init import xavier_uniform_
 from torch.nn.init import constant_
 from torch import empty
 
 # Multihead Dense Synthesizer in Einsum
 class SynthesizerDenseEinsumMH(nn.Module):
-    def __init__(self, in_dims, sentence_length, heads:int=1): # TODO: Do multiple heads operate on subset seqlen, all dims? Or full sequence, few dims? Former I think.        
+    def __init__(self, in_dims, sentence_length, heads:int=1): # TODO: Do multiple heads operate on subset seqlen, all dims? Or full sequence, few dims? Former I think.                
+        
         ''' 
         Einsum indicies and what they represent
             b = batch size
@@ -77,8 +80,7 @@ class SynthesizerDenseEinsumMH(nn.Module):
             u = sentence length, distinct values from 's', 't' (needed in second linear projection)
             h = attention heads
 
-        TODO Match fairseq style/order for passing in variables
-        best style: seq_len, batch, head, ...; this is due to gains by looping through tokens when decoding
+        TODO best style: seq_len, batch, head, ...; this is due to gains by looping through tokens when decoding
         '''
         '''
         Tasks remaining:
@@ -143,6 +145,12 @@ class SynthesizerDenseEinsumMH(nn.Module):
         return energy
 
     def forward(self, x): 
+        '''
+        Translating Fairseq's terminology for the shape of x [time, batch, channel] to terminology used by synth init
+            "time" = seq len
+            "batch" = batch size (TODO validate)
+            "channel" = embed dim
+        '''
         energy = self.get_energy_dense(x) 
         # attention = self.softmax(energy)  
 
@@ -166,7 +174,6 @@ class SynthesizerDenseEinsumMH(nn.Module):
 
         # return out_combined, attention
         return energy, value
-
 
 class MultiheadAttention(FairseqIncrementalDecoder):
     """Multi-headed attention.
@@ -199,7 +206,7 @@ class MultiheadAttention(FairseqIncrementalDecoder):
             int
         ] = 16,  # This should be part of the config
     ):
-        super().__init__(dictionary)
+        super().__init__(dictionary) # What does Line 122 do?
 
         xformers_att_config = utils.eval_str_dict(xformers_att_config)
         self.use_xformers = xformers_att_config is not None
@@ -601,6 +608,7 @@ class MultiheadAttention(FairseqIncrementalDecoder):
         attn_mask: Optional[Tensor] = None,
         before_softmax: bool = False,
         need_head_weights: bool = False,
+        AR_synth_mode: bool = False, # Added by Andrey for extension
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time x Batch x Channel
 
@@ -622,7 +630,8 @@ class MultiheadAttention(FairseqIncrementalDecoder):
         # Time is seq_len and Channel is embed_dim. 
         # From "..\transformer_layer.py": 
         #   x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
-        # query, key, value all share values, shape of [512, 4, 512]
+        # query, key, value all share values, shape of [512, 4, 512], [seq_len, batch, embed_dim]
+
 
         AR_synth_mode = True # For debug of Synth implementation
         # AR_TEMPLATE_MODE = False
@@ -651,8 +660,8 @@ class MultiheadAttention(FairseqIncrementalDecoder):
             energy shape: torch.Size([512, 8, 4, 2048])
             """
 
-        else: # Default FairSeq implementation
 
+        else: # Default implementation by Fairseq
             if need_head_weights:
                 need_weights = True
 
@@ -671,7 +680,8 @@ class MultiheadAttention(FairseqIncrementalDecoder):
                     assert value is not None
                     assert src_len, key_bsz == value.shape[:2]
 
-            # This is commented out, to avoid using their backend implementation (this prevents my testing)
+            # ANDREY NEED TO DO THIS FALSE CONDITIONAL
+            # Their backend impl takes over, = my tests are unseen
 
             # if (
             #     not self.onnx_trace
@@ -689,13 +699,37 @@ class MultiheadAttention(FairseqIncrementalDecoder):
             # ):
             #     assert key is not None and value is not None
 
-            #     if self.use_xformers:
-            #         return self._xformers_attn_forward(
-            #             query, key, value, key_padding_mask, need_weights, attn_mask
-            #         )
+            #     # ANDREY_CUSTOM_IMPLEMENTATION = False
+            #     # if ANDREY_CUSTOM_IMPLEMENTATION and self.use_xformers: # Andrey added
+            #     #     return self._xformers_attn_forward(
+            #     #         query, key, value, key_padding_mask, need_weights, attn_mask
+            #     #     )
 
-            #     else:
-            #         return F.multi_head_attention_forward(
+            #     # else:
+            #     #     return F.multi_head_attention_forward(
+            #     #         query,
+            #     #         key,
+            #     #         value,
+            #     #         self.embed_dim,
+            #     #         self.num_heads,
+            #     #         torch.empty([0]),
+            #     #         torch.cat((self.q_proj.bias, self.k_proj.bias, self.v_proj.bias)),
+            #     #         self.bias_k,
+            #     #         self.bias_v,
+            #     #         self.add_zero_attn,
+            #     #         self.dropout_module.p,
+            #     #         self.out_proj.weight,
+            #     #         self.out_proj.bias,
+            #     #         self.training or self.dropout_module.apply_during_inference,
+            #     #         key_padding_mask,
+            #     #         need_weights,
+            #     #         attn_mask,
+            #     #         use_separate_proj_weight=True,
+            #     #         q_proj_weight=self.q_proj.weight,
+            #     #         k_proj_weight=self.k_proj.weight,
+            #     #         v_proj_weight=self.v_proj.weight,
+            #     #     )
+            #     return F.multi_head_attention_forward(
             #             query,
             #             key,
             #             value,
@@ -710,7 +744,7 @@ class MultiheadAttention(FairseqIncrementalDecoder):
             #             self.out_proj.weight,
             #             self.out_proj.bias,
             #             self.training or self.dropout_module.apply_during_inference,
-            #             key_padding_mask.bool() if key_padding_mask is not None else None,
+            #             key_padding_mask,
             #             need_weights,
             #             attn_mask,
             #             use_separate_proj_weight=True,
@@ -735,7 +769,6 @@ class MultiheadAttention(FairseqIncrementalDecoder):
                 k = self.k_proj(query)
                 v = self.v_proj(query)
             elif self.encoder_decoder_attention:
-                # encoder-decoder attention
                 q = self.q_proj(query)
                 if key is None:
                     assert value is None
@@ -772,6 +805,7 @@ class MultiheadAttention(FairseqIncrementalDecoder):
                 .transpose(0, 1)
             )
             kv_bsz = bsz  # need default value for scripting
+            # print(f'AR L645  k:{k}') k is a Tensor here
             if k is not None:
                 kv_bsz = k.size(1)
                 k = (
@@ -822,7 +856,7 @@ class MultiheadAttention(FairseqIncrementalDecoder):
                     src_len=k.size(1),
                     static_kv=static_kv,
                 )
-
+                # AR Update saved state
                 saved_state["prev_key"] = k.view(kv_bsz, self.num_heads, -1, self.head_dim)
                 saved_state["prev_value"] = v.view(
                     kv_bsz, self.num_heads, -1, self.head_dim
@@ -850,25 +884,28 @@ class MultiheadAttention(FairseqIncrementalDecoder):
                     k=k, v=v, key_padding_mask=key_padding_mask, attn_mask=attn_mask
                 )
 
-            if self.encoder_decoder_attention and bsz != kv_bsz:
-                attn_weights = torch.einsum(
-                    "bxhtd,bhsd->bxhts",
+            if self.encoder_decoder_attention and bsz != kv_bsz: # Both are false in testing
+                attn_weights = torch.einsum( 
+                    "bxhtd,bhsd->bxhts", 
                     q.view((kv_bsz, -1, self.num_heads) + q.size()[1:]),
                     k.view((kv_bsz, self.num_heads) + k.size()[1:]),
                 )
                 attn_weights = attn_weights.reshape((-1,) + attn_weights.size()[-2:])
             else:
+                # AR Both of the conditions to enter the IF above are false, this ELSE always triggers
                 attn_weights = torch.bmm(q, k.transpose(1, 2))
-        # === End of Attention Weight Calculation Experiments === 
+                # Sizes: q=[32,512,64], k=[32,512,64], k.T=[32,64,512], attn_w=[32,512,512]
 
+        # === End attn_weight computation experiments ===
+                
         attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
 
         if attn_mask is not None:
             attn_mask = attn_mask.unsqueeze(0)
-            if self.onnx_trace:
-                attn_mask = attn_mask.repeat(attn_weights.size(0), 1, 1)
+            # if self.onnx_trace:
+            #     attn_mask = attn_mask.repeat(attn_weights.size(0), 1, 1)
             attn_weights += attn_mask
 
         if key_padding_mask is not None:
