@@ -91,7 +91,7 @@ class SynthesizerDenseEinsumMH(nn.Module):
         print(f'AR SynthDense Init')
         print(f'  head_dim: {head_dim}') # 64
         print(f'  in_dims: {in_dims}') # 512
-        print(f'  sentence_len: {sentence_length}') # 2048 (b/c --max-tokens) did not pass the assertion # TODO ASK HAO, unless 2048 is max input and we project down to output 512? Feels unlikely, no longer seq2seq of same length, but ask
+        print(f'  sentence_len: {sentence_length}') # 512  # 2048 (b/c --max-tokens) did not pass the assertion # TODO ASK HAO, unless 2048 is max input and we project down to output 512? Feels unlikely, no longer seq2seq of same length, but ask
         print(f'  heads: {heads}') # 8
 
         # ''' Only used for reshaping the output '''
@@ -109,7 +109,7 @@ class SynthesizerDenseEinsumMH(nn.Module):
 
         ''' Weights and Biases for Value Calculation '''
         self.value_w = Parameter(xavier_uniform_(empty(heads, in_dims, head_dim,))) # Used in "value" calculation
-        self.value_b = Parameter(constant_(empty(heads, head_dim,), 0.0)) # Need a bias vector for each attention head, stored here
+        self.value_b = Parameter(constant_(empty(head_dim,), 0.0)) # Need a bias vector for each attention head, stored here
 
         # print(f'Initialized SynthDenseEinsum. indims={in_dims}, seqlen={sentence_length}')
 
@@ -120,20 +120,23 @@ class SynthesizerDenseEinsumMH(nn.Module):
             x: Tensor (sequence length, batch size, dimension of token repr)
         Output score (how likely a word corresponds to other words) matrix.
         '''       
-        print(f'Inside get_energy_dense()')     
-        print(f'  x shape: {x.shape}') 
-        print(f'  w0 shape: {self.w0.shape}')
+        # print(f'DB 123')
+        # print(f'Inside get_energy_dense()')     
+        # print(f'  x shape: {x.shape}') 
+        # print(f'  w0 shape: {self.w0.shape}')
+        # print(f'  b0 shape: {self.b0.shape}')
         
         # Linear projection 1
         projectedReprOfTokens = torch.einsum('sbd,hdt->bhst', x, self.w0) + self.b0  # x same for all heads
         # changed above line when matching Fairseq inputs
         filteredRepOfTokens = torch.nn.functional.relu(projectedReprOfTokens)
-        print(f'  fRep shape: {filteredRepOfTokens.shape}')
-        print(f'  w1 shape: {self.w1.shape}') 
+        # print(f'  fRep shape: {filteredRepOfTokens.shape}')
+        # print(f'  w1 shape: {self.w1.shape}') 
+        # print(f'  b1 shape: {self.b1.shape}')
         
         # Linear projection 2
         energy = torch.einsum("bhst,htu->bhsu", filteredRepOfTokens, self.w1) + self.b1
-        print(f'  energy shape: {energy.shape}')
+        # print(f'  energy shape: {energy.shape}')
         
         return energy
 
@@ -151,15 +154,15 @@ class SynthesizerDenseEinsumMH(nn.Module):
         energy = self.get_energy_dense(x) 
         # attention = self.softmax(energy)  
 
-        print(f'value_w shape: {self.value_w.shape}')
-        print(f'value_b shape: {self.value_b.shape}')
+        # print(f'value_w shape: {self.value_w.shape}')
+        # print(f'value_b shape: {self.value_b.shape}')
 
-        value = torch.einsum('sbd,hde->bhse', x, self.value_w) #+ self.value_b # Expect output [12/2]: (num_heads, head_dim)
+        value = torch.einsum('sbd,hde->bhse', x, self.value_w) + self.value_b # Expect output [12/2]: (num_heads, head_dim)
         # [1/9/2023] Add bias error: size of tensor a (512) must match size of tensor b (8) at non-singleton dimension 2.
 
-        print(f'energy shape: {energy.shape}')
+        # print(f'energy shape: {energy.shape}')
         # print(f'attention shape: {attention.shape}')
-        # print(f'value shape: {value.shape}')
+        print(f'value shape: {value.shape}')
 
         # out = torch.einsum('bhsu,bhud->bhsd', attention, value) # bmm, per head (h appears in output)
         # print(f'out shape: {out.shape}')
@@ -171,8 +174,27 @@ class SynthesizerDenseEinsumMH(nn.Module):
 
         # return out_combined, attention
         # return energy, value # Jan 9, energy is [4, 8, 512, 512] and must be [32, 512, 512]
+        
         # return energy.view(-1, self.seq_len, self.in_dims) # TODO Verify that the order is correct here
-        return torch.reshape(energy, (-1, self.seq_len, self.in_dims)), torch.reshape(value, (-1, self.seq_len, self.head_dim))
+        # RuntimeError: view size is not compatible with input tensor's size and stride (at least one dimension spans across two contiguous subspaces). Use .reshape(...) instead.
+        # return torch.reshape(energy, (-1, self.seq_len, self.in_dims)), torch.reshape(value, (-1, self.seq_len, self.head_dim))
+        return energy.contiguous().view((-1, self.seq_len, self.in_dims)), value.contiguous().view((-1, self.seq_len, self.head_dim))
+
+        """
+        Jan 10 shape
+        DB 123
+        Inside get_energy_dense()
+            x shape: torch.Size([512, 4, 512])
+            w0 shape: torch.Size([8, 512, 512])
+            b0 shape: torch.Size([512])
+            fRep shape: torch.Size([4, 8, 512, 512])
+            w1 shape: torch.Size([8, 512, 512])
+            b1 shape: torch.Size([512])
+            energy shape: torch.Size([4, 8, 512, 512])
+        value_w shape: torch.Size([8, 512, 64])
+        value_b shape: torch.Size([64])
+        value shape: torch.Size([4, 8, 512, 64])
+        """
 
 class MultiheadAttention(FairseqIncrementalDecoder):
     """Multi-headed attention.
@@ -646,232 +668,218 @@ class MultiheadAttention(FairseqIncrementalDecoder):
                 assert value is not None
                 assert src_len, key_bsz == value.shape[:2]
 
+# ===== Large Chunk moved to make kv_bsz var in scope for __ after attn computation while training
+        # TODO Large Chunk can likely be optimized
+
+        # ANDREY NEED TO DO THIS FALSE CONDITIONAL
+        # Their backend impl takes over, = my tests are unseen
+
+        # if (
+        #     not self.onnx_trace
+        #     and not is_tpu  # don't use PyTorch version on TPUs
+        #     and incremental_state is None
+        #     and not static_kv
+        #     # A workaround for quantization to work. Otherwise JIT compilation
+        #     # treats bias in linear module as method.
+        #     and not torch.jit.is_scripting()
+        #     # The Multihead attention implemented in pytorch forces strong dimension check
+        #     # for input embedding dimention and K,Q,V projection dimension.
+        #     # Since pruning will break the dimension check and it is not easy to modify the pytorch API,
+        #     # it is preferred to bypass the pytorch MHA when we need to skip embed_dim_check
+        #     and not self.skip_embed_dim_check
+        # ):
+        #     assert key is not None and value is not None
+
+        #     # ANDREY_CUSTOM_IMPLEMENTATION = False
+        #     # if ANDREY_CUSTOM_IMPLEMENTATION and self.use_xformers: # Andrey added
+        #     #     return self._xformers_attn_forward(
+        #     #         query, key, value, key_padding_mask, need_weights, attn_mask
+        #     #     )
+
+        #     # else:
+        #     #     return F.multi_head_attention_forward(
+        #     #         query,
+        #     #         key,
+        #     #         value,
+        #     #         self.embed_dim,
+        #     #         self.num_heads,
+        #     #         torch.empty([0]),
+        #     #         torch.cat((self.q_proj.bias, self.k_proj.bias, self.v_proj.bias)),
+        #     #         self.bias_k,
+        #     #         self.bias_v,
+        #     #         self.add_zero_attn,
+        #     #         self.dropout_module.p,
+        #     #         self.out_proj.weight,
+        #     #         self.out_proj.bias,
+        #     #         self.training or self.dropout_module.apply_during_inference,
+        #     #         key_padding_mask,
+        #     #         need_weights,
+        #     #         attn_mask,
+        #     #         use_separate_proj_weight=True,
+        #     #         q_proj_weight=self.q_proj.weight,
+        #     #         k_proj_weight=self.k_proj.weight,
+        #     #         v_proj_weight=self.v_proj.weight,
+        #     #     )
+        #     return F.multi_head_attention_forward(
+        #             query,
+        #             key,
+        #             value,
+        #             self.embed_dim,
+        #             self.num_heads,
+        #             torch.empty([0]),
+        #             torch.cat((self.q_proj.bias, self.k_proj.bias, self.v_proj.bias)),
+        #             self.bias_k,
+        #             self.bias_v,
+        #             self.add_zero_attn,
+        #             self.dropout_module.p,
+        #             self.out_proj.weight,
+        #             self.out_proj.bias,
+        #             self.training or self.dropout_module.apply_during_inference,
+        #             key_padding_mask,
+        #             need_weights,
+        #             attn_mask,
+        #             use_separate_proj_weight=True,
+        #             q_proj_weight=self.q_proj.weight,
+        #             k_proj_weight=self.k_proj.weight,
+        #             v_proj_weight=self.v_proj.weight,
+        #         )
+
+        if incremental_state is not None:
+            saved_state = self._get_input_buffer(incremental_state)
+            if saved_state is not None and "prev_key" in saved_state:
+                # previous time steps are cached - no need to recompute
+                # key and value if they are static
+                if static_kv:
+                    assert self.encoder_decoder_attention and not self.self_attention
+                    key = value = None
+        else:
+            saved_state = None
+
+        if self.self_attention:
+            q = self.q_proj(query)
+            k = self.k_proj(query)
+            v = self.v_proj(query)
+        elif self.encoder_decoder_attention:
+            q = self.q_proj(query)
+            if key is None:
+                assert value is None
+                k = v = None
+            else:
+                if self.beam_size > 1 and bsz == key.size(1):
+                    # key is [T, bsz*beam_size, C], reduce to [T, bsz, C]
+                    key = key.view(key.size(0), -1, self.beam_size, key.size(2))[
+                        :, :, 0, :
+                    ]
+                    if key_padding_mask is not None:
+                        key_padding_mask = key_padding_mask.view(
+                            -1, self.beam_size, key_padding_mask.size(1)
+                        )[:, 0, :]
+                k = self.k_proj(key)
+                v = self.v_proj(key)
+
+        else:
+            assert key is not None and value is not None
+            q = self.q_proj(query)
+            k = self.k_proj(key)
+            v = self.v_proj(value)
+        q *= self.scaling
+
+        if self.bias_k is not None:
+            assert self.bias_v is not None
+            k, v, attn_mask, key_padding_mask = self._add_bias(
+                k, v, attn_mask, key_padding_mask, bsz
+            )
+
+        q = (
+            q.contiguous()
+            .view(tgt_len, bsz * self.num_heads, self.head_dim)
+            .transpose(0, 1)
+        )
+        kv_bsz = bsz  # need default value for scripting
+        # print(f'AR L645  k:{k}') k is a Tensor here
+        if k is not None:
+            kv_bsz = k.size(1)
+            k = (
+                k.contiguous()
+                .view(-1, kv_bsz * self.num_heads, self.head_dim)
+                .transpose(0, 1)
+            )
+        if v is not None:
+            v = (
+                v.contiguous()
+                .view(-1, kv_bsz * self.num_heads, self.head_dim)
+                .transpose(0, 1)
+            )
+
+        if saved_state is not None:
+            # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
+            if "prev_key" in saved_state:
+                _prev_key = saved_state["prev_key"]
+                assert _prev_key is not None
+                kv_bsz = _prev_key.size(0)
+                prev_key = _prev_key.view(kv_bsz * self.num_heads, -1, self.head_dim)
+                if static_kv:
+                    k = prev_key
+                else:
+                    assert k is not None
+                    k = torch.cat([prev_key, k], dim=1)
+                src_len = k.size(1)
+            if "prev_value" in saved_state:
+                _prev_value = saved_state["prev_value"]
+                assert _prev_value is not None
+                assert kv_bsz == _prev_value.size(0)
+                prev_value = _prev_value.view(
+                    kv_bsz * self.num_heads, -1, self.head_dim
+                )
+                if static_kv:
+                    v = prev_value
+                else:
+                    assert v is not None
+                    v = torch.cat([prev_value, v], dim=1)
+            prev_key_padding_mask: Optional[Tensor] = None
+            if "prev_key_padding_mask" in saved_state:
+                prev_key_padding_mask = saved_state["prev_key_padding_mask"]
+            assert k is not None and v is not None
+            key_padding_mask = MultiheadAttention._append_prev_key_padding_mask(
+                key_padding_mask=key_padding_mask,
+                prev_key_padding_mask=prev_key_padding_mask,
+                batch_size=kv_bsz,
+                src_len=k.size(1),
+                static_kv=static_kv,
+            )
+            # AR Update saved state
+            saved_state["prev_key"] = k.view(kv_bsz, self.num_heads, -1, self.head_dim)
+            saved_state["prev_value"] = v.view(
+                kv_bsz, self.num_heads, -1, self.head_dim
+            )
+            saved_state["prev_key_padding_mask"] = key_padding_mask
+            # In this branch incremental_state is never None
+            assert incremental_state is not None
+            incremental_state = self._set_input_buffer(incremental_state, saved_state)
+        assert k is not None
+        assert k.size(1) == src_len
+
+        # This is part of a workaround to get around fork/join parallelism
+        # not supporting Optional types.
+        if key_padding_mask is not None and key_padding_mask.dim() == 0:
+            key_padding_mask = None
+
+        if key_padding_mask is not None:
+            assert key_padding_mask.size(0) == kv_bsz
+            assert key_padding_mask.size(1) == src_len
+
+        # ===== End Large Chunk
 
         if AR_synth_mode:
         ## These are tests to compare how attention calculation, without arch changes, affect output.
-            print(f'AR Synthesizer entered')
-            print(f'DB 635| key.shape: {key.shape}')
+            # print(f'AR Synthesizer entered')
+            # print(f'DB 635| key.shape: {key.shape}')
             # v is the projected value, consistent with FairSeq's use of 'v' vs 'value'
             attn_weights, v = self.synth.forward(key)
             # Semantically clearer to use k or v than q though.
             # # Seq2Seq example, less confusing to use key or value than query as input to SynthDense Forward
 
-
-            """
-            Debug Jan 9
-
-            DB 635| key.shape: torch.Size([512, 4, 512])
-            Inside get_energy_dense()
-                x shape: torch.Size([512, 4, 512])
-                w0 shape: torch.Size([8, 512, 2048])
-                fRep shape: torch.Size([4, 8, 512, 2048])
-                w1 shape: torch.Size([8, 2048, 2048])
-                energy shape: torch.Size([4, 8, 512, 2048])
-            value_w shape: torch.Size([8, 512, 64])
-            value_b shape: torch.Size([8, 64])
-            energy shape: torch.Size([4, 8, 512, 2048])
-            """
-
-
         else: # Default implementation by Fairseq
-
-
-            # ANDREY NEED TO DO THIS FALSE CONDITIONAL
-            # Their backend impl takes over, = my tests are unseen
-
-            # if (
-            #     not self.onnx_trace
-            #     and not is_tpu  # don't use PyTorch version on TPUs
-            #     and incremental_state is None
-            #     and not static_kv
-            #     # A workaround for quantization to work. Otherwise JIT compilation
-            #     # treats bias in linear module as method.
-            #     and not torch.jit.is_scripting()
-            #     # The Multihead attention implemented in pytorch forces strong dimension check
-            #     # for input embedding dimention and K,Q,V projection dimension.
-            #     # Since pruning will break the dimension check and it is not easy to modify the pytorch API,
-            #     # it is preferred to bypass the pytorch MHA when we need to skip embed_dim_check
-            #     and not self.skip_embed_dim_check
-            # ):
-            #     assert key is not None and value is not None
-
-            #     # ANDREY_CUSTOM_IMPLEMENTATION = False
-            #     # if ANDREY_CUSTOM_IMPLEMENTATION and self.use_xformers: # Andrey added
-            #     #     return self._xformers_attn_forward(
-            #     #         query, key, value, key_padding_mask, need_weights, attn_mask
-            #     #     )
-
-            #     # else:
-            #     #     return F.multi_head_attention_forward(
-            #     #         query,
-            #     #         key,
-            #     #         value,
-            #     #         self.embed_dim,
-            #     #         self.num_heads,
-            #     #         torch.empty([0]),
-            #     #         torch.cat((self.q_proj.bias, self.k_proj.bias, self.v_proj.bias)),
-            #     #         self.bias_k,
-            #     #         self.bias_v,
-            #     #         self.add_zero_attn,
-            #     #         self.dropout_module.p,
-            #     #         self.out_proj.weight,
-            #     #         self.out_proj.bias,
-            #     #         self.training or self.dropout_module.apply_during_inference,
-            #     #         key_padding_mask,
-            #     #         need_weights,
-            #     #         attn_mask,
-            #     #         use_separate_proj_weight=True,
-            #     #         q_proj_weight=self.q_proj.weight,
-            #     #         k_proj_weight=self.k_proj.weight,
-            #     #         v_proj_weight=self.v_proj.weight,
-            #     #     )
-            #     return F.multi_head_attention_forward(
-            #             query,
-            #             key,
-            #             value,
-            #             self.embed_dim,
-            #             self.num_heads,
-            #             torch.empty([0]),
-            #             torch.cat((self.q_proj.bias, self.k_proj.bias, self.v_proj.bias)),
-            #             self.bias_k,
-            #             self.bias_v,
-            #             self.add_zero_attn,
-            #             self.dropout_module.p,
-            #             self.out_proj.weight,
-            #             self.out_proj.bias,
-            #             self.training or self.dropout_module.apply_during_inference,
-            #             key_padding_mask,
-            #             need_weights,
-            #             attn_mask,
-            #             use_separate_proj_weight=True,
-            #             q_proj_weight=self.q_proj.weight,
-            #             k_proj_weight=self.k_proj.weight,
-            #             v_proj_weight=self.v_proj.weight,
-            #         )
-
-            if incremental_state is not None:
-                saved_state = self._get_input_buffer(incremental_state)
-                if saved_state is not None and "prev_key" in saved_state:
-                    # previous time steps are cached - no need to recompute
-                    # key and value if they are static
-                    if static_kv:
-                        assert self.encoder_decoder_attention and not self.self_attention
-                        key = value = None
-            else:
-                saved_state = None
-
-            if self.self_attention:
-                q = self.q_proj(query)
-                k = self.k_proj(query)
-                v = self.v_proj(query)
-            elif self.encoder_decoder_attention:
-                q = self.q_proj(query)
-                if key is None:
-                    assert value is None
-                    k = v = None
-                else:
-                    if self.beam_size > 1 and bsz == key.size(1):
-                        # key is [T, bsz*beam_size, C], reduce to [T, bsz, C]
-                        key = key.view(key.size(0), -1, self.beam_size, key.size(2))[
-                            :, :, 0, :
-                        ]
-                        if key_padding_mask is not None:
-                            key_padding_mask = key_padding_mask.view(
-                                -1, self.beam_size, key_padding_mask.size(1)
-                            )[:, 0, :]
-                    k = self.k_proj(key)
-                    v = self.v_proj(key)
-
-            else:
-                assert key is not None and value is not None
-                q = self.q_proj(query)
-                k = self.k_proj(key)
-                v = self.v_proj(value)
-            q *= self.scaling
-
-            if self.bias_k is not None:
-                assert self.bias_v is not None
-                k, v, attn_mask, key_padding_mask = self._add_bias(
-                    k, v, attn_mask, key_padding_mask, bsz
-                )
-
-            q = (
-                q.contiguous()
-                .view(tgt_len, bsz * self.num_heads, self.head_dim)
-                .transpose(0, 1)
-            )
-            kv_bsz = bsz  # need default value for scripting
-            # print(f'AR L645  k:{k}') k is a Tensor here
-            if k is not None:
-                kv_bsz = k.size(1)
-                k = (
-                    k.contiguous()
-                    .view(-1, kv_bsz * self.num_heads, self.head_dim)
-                    .transpose(0, 1)
-                )
-            if v is not None:
-                v = (
-                    v.contiguous()
-                    .view(-1, kv_bsz * self.num_heads, self.head_dim)
-                    .transpose(0, 1)
-                )
-
-            if saved_state is not None:
-                # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
-                if "prev_key" in saved_state:
-                    _prev_key = saved_state["prev_key"]
-                    assert _prev_key is not None
-                    kv_bsz = _prev_key.size(0)
-                    prev_key = _prev_key.view(kv_bsz * self.num_heads, -1, self.head_dim)
-                    if static_kv:
-                        k = prev_key
-                    else:
-                        assert k is not None
-                        k = torch.cat([prev_key, k], dim=1)
-                    src_len = k.size(1)
-                if "prev_value" in saved_state:
-                    _prev_value = saved_state["prev_value"]
-                    assert _prev_value is not None
-                    assert kv_bsz == _prev_value.size(0)
-                    prev_value = _prev_value.view(
-                        kv_bsz * self.num_heads, -1, self.head_dim
-                    )
-                    if static_kv:
-                        v = prev_value
-                    else:
-                        assert v is not None
-                        v = torch.cat([prev_value, v], dim=1)
-                prev_key_padding_mask: Optional[Tensor] = None
-                if "prev_key_padding_mask" in saved_state:
-                    prev_key_padding_mask = saved_state["prev_key_padding_mask"]
-                assert k is not None and v is not None
-                key_padding_mask = MultiheadAttention._append_prev_key_padding_mask(
-                    key_padding_mask=key_padding_mask,
-                    prev_key_padding_mask=prev_key_padding_mask,
-                    batch_size=kv_bsz,
-                    src_len=k.size(1),
-                    static_kv=static_kv,
-                )
-                # AR Update saved state
-                saved_state["prev_key"] = k.view(kv_bsz, self.num_heads, -1, self.head_dim)
-                saved_state["prev_value"] = v.view(
-                    kv_bsz, self.num_heads, -1, self.head_dim
-                )
-                saved_state["prev_key_padding_mask"] = key_padding_mask
-                # In this branch incremental_state is never None
-                assert incremental_state is not None
-                incremental_state = self._set_input_buffer(incremental_state, saved_state)
-            assert k is not None
-            assert k.size(1) == src_len
-
-            # This is part of a workaround to get around fork/join parallelism
-            # not supporting Optional types.
-            if key_padding_mask is not None and key_padding_mask.dim() == 0:
-                key_padding_mask = None
-
-            if key_padding_mask is not None:
-                assert key_padding_mask.size(0) == kv_bsz
-                assert key_padding_mask.size(1) == src_len
 
             if self.add_zero_attn:
                 assert v is not None
@@ -896,8 +904,8 @@ class MultiheadAttention(FairseqIncrementalDecoder):
                 
         attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz) # TODO this does nothing, semantic sugar?
 
-        print(f'DB 896| attn weight size: {list(attn_weights.size())}')
-        print(f'      | expected:         {[bsz * self.num_heads, tgt_len, src_len]}')
+        # print(f'DB 896| attn weight size: {list(attn_weights.size())}')
+        # print(f'      | expected:         {[bsz * self.num_heads, tgt_len, src_len]}')
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
 
@@ -905,7 +913,9 @@ class MultiheadAttention(FairseqIncrementalDecoder):
             attn_mask = attn_mask.unsqueeze(0)
             # if self.onnx_trace:
             #     attn_mask = attn_mask.repeat(attn_weights.size(0), 1, 1)
-            attn_weights += attn_mask
+            
+            # print(f'DB 891 Attn| attn_mask: {attn_mask}')
+            attn_weights += attn_mask # attn_mask contains 0 and -inf, so weights: {[1, 0], -inf}
 
         if key_padding_mask is not None:
             # don't attend to padding symbols
@@ -926,6 +936,7 @@ class MultiheadAttention(FairseqIncrementalDecoder):
                 attn_weights = attn_weights.masked_fill(key_padding_mask, float("-inf"))
                 attn_weights = attn_weights.transpose(0, 2)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+            # Roughly: (1) unpack to batches, unpack to kv_bsz, bool (TODO) -> value (-inf), repack.
 
         # TODO check what this means and whether it triggers, synth definitely outputs nonsoftmaxed weights assuming softmax would be applied
         if before_softmax:
@@ -936,6 +947,9 @@ class MultiheadAttention(FairseqIncrementalDecoder):
         )
         attn_weights = attn_weights_float.type_as(attn_weights)
         attn_probs = self.dropout_module(attn_weights)
+        # print(f'DB 928| max, min attn_weights: {torch.max(attn_weights)}, {torch.min(attn_weights)}')
+        # print(f'      | max, min attn_probs:   {torch.max(attn_probs)}, {torch.min(attn_probs)}')
+        # Both attn_weights and attn_probs are in range [1.0, 0.0]
 
         assert v is not None
         attn: Optional[Tensor] = None
@@ -960,8 +974,12 @@ class MultiheadAttention(FairseqIncrementalDecoder):
             )
             attn = attn.reshape((-1,) + attn.size()[-2:])
         else:
-            print(f'DB 962| attn_probs.shape: {attn_probs.shape}')
-            print(f'      | v shape: {v.shape}')
+            # print(f'DB 962| attn_probs.shape: {attn_probs.shape}')
+            # print(f'      | v shape:          {v.shape}')
+            """
+            DB 962| attn_probs.shape: torch.Size([32, 512, 512])
+                  | v shape:          torch.Size([32, 512, 64])
+            """
 
             attn = torch.bmm(attn_probs, v)
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
