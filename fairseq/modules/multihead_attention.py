@@ -68,7 +68,7 @@ from torch import empty
 
 # Multihead Dense Synthesizer in Einsum
 class SynthesizerDenseEinsumMH(nn.Module):
-    def __init__(self, in_dims, sentence_length, heads:int=1): # TODO: Do multiple heads operate on subset seqlen, all dims? Or full sequence, few dims? Former I think.                
+    def __init__(self, in_dims, sentence_length, heads:int=1):             
         
         ''' 
         Einsum indicies and what they represent
@@ -273,18 +273,11 @@ class MultiheadAttention(FairseqIncrementalDecoder):
         self.skip_embed_dim_check = False
         self.init_incremental_state()
 
-        # print(f'AR MHA init, embed_dim: {embed_dim}') # 512
-
         # === Andrey Synth init Start ===
-        # I think --share-decoder-input-output-embed in the train command implies embed_dim is identical?
-        # TODO add guardrails, safety if some values are missing (asserts, etc)
         num_heads = self.num_heads
-        # Batch size depends on input, like in Einsum? Implicitly handled? # TODO verify in code
-        embed_dim = self.embed_dim
-        sentence_length = 2048 #103 # TODO what to plug in, print shape; 
-        #   command has --tokens-per-sample 512, --max-tokens 2048
-        # 2048 to be in line with max tokens
-
+        embed_dim = self.embed_dim # I think --share-decoder-input-output-embed in the train command implies embed_dim is identical?
+        sentence_length = 512 # 2048 failed an assertion after attn_weight computation. # command has --tokens-per-sample 512, --max-tokens 2048
+        
         self.synth = SynthesizerDenseEinsumMH(embed_dim, sentence_length, num_heads)
         # === Andrey Synth init End ===
 
@@ -628,9 +621,28 @@ class MultiheadAttention(FairseqIncrementalDecoder):
         #   x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
         # query, key, value all share values, shape of [512, 4, 512], [seq_len, batch, embed_dim]
 
-
         AR_synth_mode = True # For debug of Synth implementation
         # AR_TEMPLATE_MODE = False
+
+        # Default implementation by Fairseq
+        if need_head_weights:
+            need_weights = True
+
+        is_tpu = query.device.type == "xla"
+
+        tgt_len, bsz, embed_dim = query.size()
+        src_len = tgt_len
+        if not self.skip_embed_dim_check:
+            assert (
+                embed_dim == self.embed_dim
+            ), f"query dim {embed_dim} != {self.embed_dim}"
+        assert list(query.size()) == [tgt_len, bsz, embed_dim]
+        if key is not None:
+            src_len, key_bsz, _ = key.size()
+            if not torch.jit.is_scripting():
+                assert value is not None
+                assert src_len, key_bsz == value.shape[:2]
+
 
         if AR_synth_mode:
         ## These are tests to compare how attention calculation, without arch changes, affect output.
@@ -659,23 +671,7 @@ class MultiheadAttention(FairseqIncrementalDecoder):
 
 
         else: # Default implementation by Fairseq
-            if need_head_weights:
-                need_weights = True
 
-            is_tpu = query.device.type == "xla"
-
-            tgt_len, bsz, embed_dim = query.size()
-            src_len = tgt_len
-            if not self.skip_embed_dim_check:
-                assert (
-                    embed_dim == self.embed_dim
-                ), f"query dim {embed_dim} != {self.embed_dim}"
-            assert list(query.size()) == [tgt_len, bsz, embed_dim]
-            if key is not None:
-                src_len, key_bsz, _ = key.size()
-                if not torch.jit.is_scripting():
-                    assert value is not None
-                    assert src_len, key_bsz == value.shape[:2]
 
             # ANDREY NEED TO DO THIS FALSE CONDITIONAL
             # Their backend impl takes over, = my tests are unseen
@@ -895,7 +891,10 @@ class MultiheadAttention(FairseqIncrementalDecoder):
 
         # === End attn_weight computation experiments ===
                 
-        attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)
+        attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz) # TODO this does nothing, semantic sugar?
+
+        print(f'DB 896| attn weight size: {list(attn_weights.size())}')
+        print(f'      | expected:         {[bsz * self.num_heads, tgt_len, src_len]}')
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
 
