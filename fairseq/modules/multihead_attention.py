@@ -91,12 +91,13 @@ class SynthesizerDenseEinsumMH(nn.Module):
         print(f'AR SynthDense Init')
         print(f'  head_dim: {head_dim}') # 64
         print(f'  in_dims: {in_dims}') # 512
-        print(f'  sentence_len: {sentence_length}') # 2048 --max-tokens
+        print(f'  sentence_len: {sentence_length}') # 2048 (b/c --max-tokens) did not pass the assertion # TODO ASK HAO, unless 2048 is max input and we project down to output 512? Feels unlikely, no longer seq2seq of same length, but ask
         print(f'  heads: {heads}') # 8
 
         # ''' Only used for reshaping the output '''
-        # self.seq_len = sentence_length
-        # self.in_dims = in_dims
+        self.seq_len = sentence_length
+        self.in_dims = in_dims
+        self.head_dim = head_dim
 
         ''' Weights and Biases for Linear Layers '''
         self.w0 = Parameter(xavier_uniform_(empty(heads, in_dims, sentence_length,)))  # Linear 1 weights 
@@ -169,7 +170,9 @@ class SynthesizerDenseEinsumMH(nn.Module):
         # print(f'out_combined shape: {out_combined.shape}')
 
         # return out_combined, attention
-        return energy, value
+        # return energy, value # Jan 9, energy is [4, 8, 512, 512] and must be [32, 512, 512]
+        # return energy.view(-1, self.seq_len, self.in_dims) # TODO Verify that the order is correct here
+        return torch.reshape(energy, (-1, self.seq_len, self.in_dims)), torch.reshape(value, (-1, self.seq_len, self.head_dim))
 
 class MultiheadAttention(FairseqIncrementalDecoder):
     """Multi-headed attention.
@@ -924,6 +927,7 @@ class MultiheadAttention(FairseqIncrementalDecoder):
                 attn_weights = attn_weights.transpose(0, 2)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
+        # TODO check what this means and whether it triggers, synth definitely outputs nonsoftmaxed weights assuming softmax would be applied
         if before_softmax:
             return attn_weights, v
 
@@ -956,6 +960,9 @@ class MultiheadAttention(FairseqIncrementalDecoder):
             )
             attn = attn.reshape((-1,) + attn.size()[-2:])
         else:
+            print(f'DB 962| attn_probs.shape: {attn_probs.shape}')
+            print(f'      | v shape: {v.shape}')
+
             attn = torch.bmm(attn_probs, v)
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
         if self.onnx_trace and attn.size(1) == 1:
