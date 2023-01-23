@@ -162,7 +162,7 @@ class SynthesizerDenseEinsumMH(nn.Module):
 
         # print(f'energy shape: {energy.shape}')
         # print(f'attention shape: {attention.shape}')
-        print(f'value shape: {value.shape}')
+        # print(f'value shape: {value.shape}')
 
         # out = torch.einsum('bhsu,bhud->bhsd', attention, value) # bmm, per head (h appears in output)
         # print(f'out shape: {out.shape}')
@@ -875,6 +875,7 @@ class MultiheadAttention(FairseqIncrementalDecoder):
             # print(f'AR Synthesizer entered')
             # print(f'DB 635| key.shape: {key.shape}')
             # v is the projected value, consistent with FairSeq's use of 'v' vs 'value'
+            print(f'Fairseq Synth Mode')
             attn_weights, v = self.synth.forward(key)
             # Semantically clearer to use k or v than q though.
             # # Seq2Seq example, less confusing to use key or value than query as input to SynthDense Forward
