@@ -605,3 +605,9 @@ def transformer_lm_gpt3_175(args):
     args.decoder_embed_dim = safe_getattr(args, "decoder_embed_dim", 12288)
     args.decoder_attention_heads = safe_getattr(args, "decoder_attention_heads", 96)
     base_gpt3_architecture(args)
+
+@register_model_architecture("transformer_lm", "transformer_lm_synthesized_attention")
+def transformer_lm_synthesized_attention(args):
+    # TODO param count
+    pass 
+    # TODO complete, does einsum belong here?
