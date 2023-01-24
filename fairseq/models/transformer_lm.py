@@ -609,5 +609,9 @@ def transformer_lm_gpt3_175(args):
 @register_model_architecture("transformer_lm", "transformer_lm_synthesized_attention")
 def transformer_lm_synthesized_attention(args):
     # TODO param count
-    pass 
-    # TODO complete, does einsum belong here?
+    args.decoder_layers = safe_getattr(args, "decoder_layers", 96)
+    args.decoder_embed_dim = safe_getattr(args, "decoder_embed_dim", 12288)
+    args.decoder_attention_heads = safe_getattr(args, "decoder_attention_heads", 96)
+    # TODO complete, architecture call
+    # Need typical arch, just with synthesizer replacing attention computation
+    # does einsum belong here? likely not

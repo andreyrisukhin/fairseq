@@ -167,34 +167,14 @@ class SynthesizerDenseEinsumMH(nn.Module):
         # out = torch.einsum('bhsu,bhud->bhsd', attention, value) # bmm, per head (h appears in output)
         # print(f'out shape: {out.shape}')
         
-        # # TODO check view recombination, does the operation get values where they belong?
-
         # out_combined = out.contiguous().view(-1, self.seq_len, self.in_dims)  # -1 for unknown batch size
         # print(f'out_combined shape: {out_combined.shape}')
 
         # return out_combined, attention
-        # return energy, value # Jan 9, energy is [4, 8, 512, 512] and must be [32, 512, 512]
-        
-        # return energy.view(-1, self.seq_len, self.in_dims) # TODO Verify that the order is correct here
-        # RuntimeError: view size is not compatible with input tensor's size and stride (at least one dimension spans across two contiguous subspaces). Use .reshape(...) instead.
-        # return torch.reshape(energy, (-1, self.seq_len, self.in_dims)), torch.reshape(value, (-1, self.seq_len, self.head_dim))
+        # return energy, value 
+
         return energy.contiguous().view((-1, self.seq_len, self.in_dims)), value.contiguous().view((-1, self.seq_len, self.head_dim))
 
-        """
-        Jan 10 shape
-        DB 123
-        Inside get_energy_dense()
-            x shape: torch.Size([512, 4, 512])
-            w0 shape: torch.Size([8, 512, 512])
-            b0 shape: torch.Size([512])
-            fRep shape: torch.Size([4, 8, 512, 512])
-            w1 shape: torch.Size([8, 512, 512])
-            b1 shape: torch.Size([512])
-            energy shape: torch.Size([4, 8, 512, 512])
-        value_w shape: torch.Size([8, 512, 64])
-        value_b shape: torch.Size([64])
-        value shape: torch.Size([4, 8, 512, 64])
-        """
 
 class MultiheadAttention(FairseqIncrementalDecoder):
     """Multi-headed attention.
@@ -646,7 +626,7 @@ class MultiheadAttention(FairseqIncrementalDecoder):
         #   x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
         # query, key, value all share values, shape of [512, 4, 512], [seq_len, batch, embed_dim]
 
-        AR_synth_mode = True # For debug of Synth implementation
+        AR_synth_mode = False #True # For debug of Synth implementation
         # AR_TEMPLATE_MODE = False
 
         # Default implementation by Fairseq
