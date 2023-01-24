@@ -1,8 +1,6 @@
 import torch
 from torch import Tensor, nn
 from torch.nn import Parameter
-
-# AR Added
 from torch.nn.init import xavier_uniform_
 from torch.nn.init import constant_
 from torch import empty
@@ -10,7 +8,6 @@ from torch import empty
 # Multihead Dense Synthesizer in Einsum
 class SynthesizerDenseEinsumMH(nn.Module):
     def __init__(self, in_dims, sentence_length, heads:int=1):             
-        
         ''' 
         Einsum indicies and what they represent
             b = batch size
@@ -98,8 +95,7 @@ class SynthesizerDenseEinsumMH(nn.Module):
         # print(f'value_w shape: {self.value_w.shape}')
         # print(f'value_b shape: {self.value_b.shape}')
 
-        value = torch.einsum('sbd,hde->bhse', x, self.value_w) + self.value_b # Expect output [12/2]: (num_heads, head_dim)
-        # [1/9/2023] Add bias error: size of tensor a (512) must match size of tensor b (8) at non-singleton dimension 2.
+        value = torch.einsum('sbd,hde->bhse', x, self.value_w) + self.value_b
 
         # print(f'energy shape: {energy.shape}')
         # print(f'attention shape: {attention.shape}')
