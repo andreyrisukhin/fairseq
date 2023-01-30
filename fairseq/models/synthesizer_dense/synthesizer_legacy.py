@@ -154,7 +154,7 @@ class SynthesizerDenseModel(TransformerModelBase):
 # architectures
 
 
-@register_model_architecture("transformer", "transformer_tiny")
+@register_model_architecture("synthesizer_dense", "synthesizer_dense_tiny")
 def tiny_architecture(args):
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 64)
     args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 64)
@@ -165,7 +165,7 @@ def tiny_architecture(args):
     return base_architecture(args)
 
 
-@register_model_architecture("transformer", "transformer")
+@register_model_architecture("synthesizer_dense", "synthesizer_dense")
 def base_architecture(args):
     args.encoder_embed_path = getattr(args, "encoder_embed_path", None)
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 512)
