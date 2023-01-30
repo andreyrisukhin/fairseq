@@ -214,6 +214,7 @@ def import_models(models_dir, namespace):
             and (file.endswith(".py") or os.path.isdir(path))
         ):
             model_name = file[: file.find(".py")] if file.endswith(".py") else file
+            print(f'AR DB model_name: {model_name}, namespace: {namespace}')
             importlib.import_module(namespace + "." + model_name)
 
             # extra `model_parser` for sphinx

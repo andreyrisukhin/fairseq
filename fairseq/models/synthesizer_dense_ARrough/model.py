@@ -9,8 +9,8 @@ import fairseq.models.transformer as transformer
 # from fairseq.models.abc.utils import add_abc_args, get_abc_attr
 from fairseq.modules.multihead_synthesizer import *
 
-@register_model("synthesizer")
-class AbcModel(transformer.TransformerModel):
+@register_model("synthesizer_dense")
+class SynthesizerDenseModel(transformer.TransformerModel):
 
     def __init__(self, args, encoder, decoder):
         super().__init__(args, encoder, decoder)
@@ -95,6 +95,19 @@ class AbcModel(transformer.TransformerModel):
     #         embed_tokens, 
     #         has_cross_attention=True)
     
+    """
+    This file (in abc) =/= mha.py
+    3 file hierarchy
+    reuse likely most here; synth and template also replace attn with our version
+    can likely reuse the model by renaming "abcencoder->synthencoder"
+
+    diff arguments for attn, may need arg update in old repo (=motivation for new pieces in ABC)
+
+    in abc encode/decode can reuse; should modify the file focusing on attn
+    Find this; contains new implementation of softmax, maybe in seperate file
+        focus on this! Reuse others
+    """
+
     # @classmethod
     # def build_decoder(cls, args, tgt_dict, embed_tokens):
     #     return AbcDecoder(
