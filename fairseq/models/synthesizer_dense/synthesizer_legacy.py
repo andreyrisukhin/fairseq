@@ -74,10 +74,10 @@ class SynthesizerDenseModel(TransformerModelBase):
     #     }
     #     # fmt: on
 
-    # def __init__(self, args, encoder, decoder):
-    #     cfg = TransformerConfig.from_namespace(args)
-    #     super().__init__(cfg, encoder, decoder)
-    #     self.args = args
+    def __init__(self, args, encoder, decoder):
+        cfg = TransformerConfig.from_namespace(args)
+        super().__init__(cfg, encoder, decoder)
+        self.args = args
 
     @classmethod
     def add_args(cls, parser):
