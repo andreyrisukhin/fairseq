@@ -63,7 +63,7 @@ def _mask_for_xformers(mask: Tensor, to_dtype: Optional[torch.dtype] = None):
     return mask
 
 
-class MultiheadAttention(FairseqIncrementalDecoder):
+class SynthesizedMultiheadAttention(FairseqIncrementalDecoder):
     """Multi-headed attention.
 
     See "Attention Is All You Need" for more details.
@@ -661,7 +661,7 @@ class MultiheadAttention(FairseqIncrementalDecoder):
 
         # ===== End Large Chunk
 
-        print(f's_mha.py')
+        print(f'AR s_mha.py')
         attn_weights, v = self.synth.forward(key)       
         attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz) # TODO this does nothing, semantic sugar?
 

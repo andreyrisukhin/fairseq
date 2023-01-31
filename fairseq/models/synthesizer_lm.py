@@ -327,15 +327,16 @@ class SynthesizerLanguageModel(FairseqLanguageModel):
 
 
 def base_lm_architecture(args):
-    # backward compatibility for older model checkpoints
-    if safe_hasattr(args, "no_tie_adaptive_proj"):
-        # previous models defined --no-tie-adaptive-proj, so use the existence of
-        # that option to determine if this is an "old" model checkpoint
-        args.no_decoder_final_norm = True  # old models always set this to True
-        if args.no_tie_adaptive_proj is False:
-            args.tie_adaptive_proj = True
-    if safe_hasattr(args, "decoder_final_norm"):
-        args.no_decoder_final_norm = not args.decoder_final_norm
+    """ No need for backward compatibility with synthesizer """
+    # # backward compatibility for older model checkpoints
+    # if safe_hasattr(args, "no_tie_adaptive_proj"):
+    #     # previous models defined --no-tie-adaptive-proj, so use the existence of
+    #     # that option to determine if this is an "old" model checkpoint
+    #     args.no_decoder_final_norm = True  # old models always set this to True
+    #     if args.no_tie_adaptive_proj is False:
+    #         args.tie_adaptive_proj = True
+    # if safe_hasattr(args, "decoder_final_norm"):
+    #     args.no_decoder_final_norm = not args.decoder_final_norm
 
     args.dropout = safe_getattr(args, "dropout", 0.1)
     args.attention_dropout = safe_getattr(args, "attention_dropout", 0.0)
@@ -487,43 +488,6 @@ def base_lm_architecture(args):
 #     args.activation_fn = safe_getattr(args, "activation_fn", "gelu")
 #     base_lm_architecture(args)
 
-
-# @register_model_architecture("transformer_lm", "transformer_lm_gpt2_big")
-# def transformer_lm_gpt2_big(args):
-#     args.decoder_embed_dim = safe_getattr(args, "decoder_embed_dim", 1600)
-#     args.decoder_ffn_embed_dim = safe_getattr(args, "decoder_ffn_embed_dim", 6400)
-#     args.decoder_layers = safe_getattr(args, "decoder_layers", 48)
-#     args.decoder_attention_heads = safe_getattr(args, "decoder_attention_heads", 25)
-#     args.dropout = safe_getattr(args, "dropout", 0.1)
-#     args.attention_dropout = safe_getattr(args, "attention_dropout", 0.1)
-#     args.activation_fn = safe_getattr(args, "activation_fn", "gelu")
-#     base_lm_architecture(args)
-
-
-# @register_model_architecture("transformer_lm", "transformer_lm_gpt2_big_wide")
-# def transformer_lm_gpt2_big_wide(args):
-#     args.decoder_embed_dim = getattr(args, "decoder_embed_dim", 2048)
-#     args.decoder_ffn_embed_dim = getattr(args, "decoder_ffn_embed_dim", 8192)
-#     args.decoder_layers = getattr(args, "decoder_layers", 24)
-#     args.decoder_attention_heads = getattr(args, "decoder_attention_heads", 32)
-#     args.dropout = getattr(args, "dropout", 0.1)
-#     args.attention_dropout = getattr(args, "attention_dropout", 0.1)
-#     args.activation_fn = getattr(args, "activation_fn", "gelu")
-#     base_lm_architecture(args)
-
-
-# @register_model_architecture("transformer_lm", "transformer_lm_gpt2_bigger")
-# def transformer_lm_gpt2_bigger(args):
-#     args.decoder_embed_dim = getattr(args, "decoder_embed_dim", 2048)
-#     args.decoder_ffn_embed_dim = getattr(args, "decoder_ffn_embed_dim", 8192)
-#     args.decoder_layers = getattr(args, "decoder_layers", 48)
-#     args.decoder_attention_heads = getattr(args, "decoder_attention_heads", 32)
-#     args.dropout = getattr(args, "dropout", 0.1)
-#     args.attention_dropout = getattr(args, "attention_dropout", 0.1)
-#     args.activation_fn = getattr(args, "activation_fn", "gelu")
-#     base_lm_architecture(args)
-
-
 # def base_gpt3_architecture(args):
 #     args.decoder_input_dim = args.decoder_embed_dim
 #     args.decoder_output_dim = args.decoder_embed_dim
@@ -547,68 +511,6 @@ def base_lm_architecture(args):
 #     args.decoder_attention_heads = safe_getattr(args, "decoder_attention_heads", 12)
 #     base_gpt3_architecture(args)
 
-
-# @register_model_architecture("transformer_lm", "transformer_lm_gpt3_medium")
-# def transformer_lm_gpt3_medium(args):
-#     # 350M params
-#     args.decoder_layers = safe_getattr(args, "decoder_layers", 24)
-#     args.decoder_embed_dim = safe_getattr(args, "decoder_embed_dim", 1024)
-#     args.decoder_attention_heads = safe_getattr(args, "decoder_attention_heads", 16)
-#     base_gpt3_architecture(args)
-
-
-# @register_model_architecture("transformer_lm", "transformer_lm_gpt3_large")
-# def transformer_lm_gpt3_large(args):
-#     # 760M params
-#     args.decoder_layers = safe_getattr(args, "decoder_layers", 24)
-#     args.decoder_embed_dim = safe_getattr(args, "decoder_embed_dim", 1536)
-#     args.decoder_attention_heads = safe_getattr(args, "decoder_attention_heads", 16)
-#     base_gpt3_architecture(args)
-
-
-# @register_model_architecture("transformer_lm", "transformer_lm_gpt3_xl")
-# def transformer_lm_gpt3_xl(args):
-#     # 1.3B params
-#     args.decoder_layers = safe_getattr(args, "decoder_layers", 24)
-#     args.decoder_embed_dim = safe_getattr(args, "decoder_embed_dim", 2048)
-#     args.decoder_attention_heads = safe_getattr(args, "decoder_attention_heads", 32)
-#     base_gpt3_architecture(args)
-
-
-# @register_model_architecture("transformer_lm", "transformer_lm_gpt3_2_7")
-# def transformer_lm_gpt3_2_7(args):
-#     # 2.7B params
-#     args.decoder_layers = safe_getattr(args, "decoder_layers", 32)
-#     args.decoder_embed_dim = safe_getattr(args, "decoder_embed_dim", 2560)
-#     args.decoder_attention_heads = safe_getattr(args, "decoder_attention_heads", 32)
-#     base_gpt3_architecture(args)
-
-
-# @register_model_architecture("transformer_lm", "transformer_lm_gpt3_6_7")
-# def transformer_lm_gpt3_6_7(args):
-#     # 6.7B params
-#     args.decoder_layers = safe_getattr(args, "decoder_layers", 32)
-#     args.decoder_embed_dim = safe_getattr(args, "decoder_embed_dim", 4096)
-#     args.decoder_attention_heads = safe_getattr(args, "decoder_attention_heads", 32)
-#     base_gpt3_architecture(args)
-
-
-# @register_model_architecture("transformer_lm", "transformer_lm_gpt3_13")
-# def transformer_lm_gpt3_13(args):
-#     # 13B params
-#     args.decoder_layers = safe_getattr(args, "decoder_layers", 40)
-#     args.decoder_embed_dim = safe_getattr(args, "decoder_embed_dim", 5120)
-#     args.decoder_attention_heads = safe_getattr(args, "decoder_attention_heads", 40)
-#     base_gpt3_architecture(args)
-
-
-# @register_model_architecture("transformer_lm", "transformer_lm_gpt3_175")
-# def transformer_lm_gpt3_175(args):
-#     # 175B params
-#     args.decoder_layers = safe_getattr(args, "decoder_layers", 96)
-#     args.decoder_embed_dim = safe_getattr(args, "decoder_embed_dim", 12288)
-#     args.decoder_attention_heads = safe_getattr(args, "decoder_attention_heads", 96)
-#     base_gpt3_architecture(args)
 
 @register_model_architecture("synthesizer_lm", "synthesizer_lm_synthesized_attention")
 def synthesizer_lm_synthesized_attention(args):
