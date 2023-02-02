@@ -20,7 +20,7 @@ from fairseq.models import (
     register_model,
     register_model_architecture,
 )
-from fairseq.models.transformer import (
+from fairseq.models.synthesizer_dense import (
     DEFAULT_MIN_PARAMS_TO_WRAP,
     Embedding,
     TransformerDecoder,

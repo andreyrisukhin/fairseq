@@ -338,7 +338,7 @@ class TransformerDecoderBase(FairseqIncrementalDecoder):
                 self_attn_mask = None
 
             x, layer_attn, _ = layer(
-                x,
+                x, # Input is x
                 enc,
                 padding_mask,
                 incremental_state,

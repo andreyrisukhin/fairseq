@@ -238,7 +238,7 @@ class TransformerEncoderLayer(TransformerEncoderLayerBase):
         )
 
 
-class TransformerDecoderLayerBase(nn.Module):
+class SynthesizerDecoderLayerBase(nn.Module):
     """Decoder layer block.
 
     In the original paper each operation (multi-head attention, encoder
