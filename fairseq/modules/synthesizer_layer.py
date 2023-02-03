@@ -10,13 +10,13 @@ import torch.nn as nn
 from torch import Tensor
 
 from fairseq import utils
-from fairseq.models.transformer import TransformerConfig
+from fairseq.models.synthesizer_dense import SynthesizerConfig
 from fairseq.modules import LayerNorm, MultiheadAttention
 from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
 
 
-class TransformerEncoderLayerBase(nn.Module):
+class SynthesizerEncoderLayerBase(nn.Module):
     """Encoder layer block.
 
     In the original paper each operation (multi-head attention or FFN) is
@@ -227,14 +227,14 @@ class TransformerEncoderLayerBase(nn.Module):
 
 
 # backward compatible with the legacy argparse format
-class TransformerEncoderLayer(TransformerEncoderLayerBase):
+class SynthesizerEncoderLayer(SynthesizerEncoderLayerBase):
     def __init__(self, args):
-        super().__init__(TransformerConfig.from_namespace(args))
+        super().__init__(SynthesizerConfig.from_namespace(args))
         self.args = args
 
     def build_self_attention(self, embed_dim, args):
         return super().build_self_attention(
-            embed_dim, TransformerConfig.from_namespace(args)
+            embed_dim, SynthesizerConfig.from_namespace(args)
         )
 
 
@@ -469,6 +469,7 @@ class SynthesizerDecoderLayerBase(nn.Module):
             need_weights=False,
             attn_mask=self_attn_mask,
         )
+
         if self.c_attn is not None:
             tgt_len, bsz = x.size(0), x.size(1)
             x = x.view(tgt_len, bsz, self.nh, self.head_dim)
@@ -550,7 +551,7 @@ class SynthesizerDecoderLayer(SynthesizerDecoderLayerBase):
         self, args, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False
     ):
         super().__init__(
-            TransformerConfig.from_namespace(args),
+            SynthesizerConfig.from_namespace(args),
             no_encoder_attn=no_encoder_attn,
             add_bias_kv=add_bias_kv,
             add_zero_attn=add_zero_attn,
@@ -562,7 +563,7 @@ class SynthesizerDecoderLayer(SynthesizerDecoderLayerBase):
     ):
         return super().build_self_attention(
             embed_dim,
-            TransformerConfig.from_namespace(args),
+            SynthesizerConfig.from_namespace(args),
             add_bias_kv=add_bias_kv,
             add_zero_attn=add_zero_attn,
         )
@@ -570,5 +571,5 @@ class SynthesizerDecoderLayer(SynthesizerDecoderLayerBase):
     def build_encoder_attention(self, embed_dim, args):
         return super().build_encoder_attention(
             embed_dim,
-            TransformerConfig.from_namespace(args),
+            SynthesizerConfig.from_namespace(args),
         )

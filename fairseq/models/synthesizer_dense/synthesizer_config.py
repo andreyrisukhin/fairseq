@@ -94,7 +94,7 @@ class QuantNoiseConfig(FairseqDataclass):
 
 
 @dataclass
-class TransformerConfig(FairseqDataclass):
+class SynthesizerConfig(FairseqDataclass):
     activation_fn: ChoiceEnum(utils.get_available_activation_fns()) = field(
         default="relu",
         metadata={"help": "activation function to use"},

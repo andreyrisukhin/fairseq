@@ -13,7 +13,7 @@ from torch import Tensor
 from fairseq import utils
 from fairseq.distributed import fsdp_wrap
 from fairseq.models import FairseqIncrementalDecoder
-from fairseq.models.transformer import TransformerConfig
+from fairseq.models.synthesizer_dense import SynthesizerConfig
 from fairseq.modules import (
     AdaptiveSoftmax,
     BaseLayer,
@@ -30,13 +30,13 @@ from fairseq.modules.quant_noise import quant_noise as apply_quant_noise_
 
 # rewrite name for backward compatibility in `make_generation_fast_`
 def module_name_fordropout(module_name: str) -> str:
-    if module_name == "TransformerDecoderBase":
-        return "TransformerDecoder"
+    if module_name == "SynthesizerDecoderBase":
+        return "SynthesizerDecoder"
     else:
         return module_name
 
 
-class TransformerDecoderBase(FairseqIncrementalDecoder):
+class SynthesizerDecoderBase(FairseqIncrementalDecoder):
     """
     Transformer decoder consisting of *cfg.decoder.layers* layers. Each layer
     is a :class:`TransformerDecoderLayer`.
@@ -454,7 +454,7 @@ def Linear(in_features, out_features, bias=True):
     return m
 
 
-class TransformerDecoder(TransformerDecoderBase):
+class SynthesizerDecoder(SynthesizerDecoderBase):
     def __init__(
         self,
         args,
@@ -465,7 +465,7 @@ class TransformerDecoder(TransformerDecoderBase):
     ):
         self.args = args
         super().__init__(
-            TransformerConfig.from_namespace(args),
+            SynthesizerConfig.from_namespace(args),
             dictionary,
             embed_tokens,
             no_encoder_attn=no_encoder_attn,
@@ -474,10 +474,10 @@ class TransformerDecoder(TransformerDecoderBase):
 
     def build_output_projection(self, args, dictionary, embed_tokens):
         super().build_output_projection(
-            TransformerConfig.from_namespace(args), dictionary, embed_tokens
+            SynthesizerConfig.from_namespace(args), dictionary, embed_tokens
         )
 
     def build_decoder_layer(self, args, no_encoder_attn=False):
         return super().build_decoder_layer(
-            TransformerConfig.from_namespace(args), no_encoder_attn=no_encoder_attn
+            SynthesizerConfig.from_namespace(args), no_encoder_attn=no_encoder_attn
         )
