@@ -172,6 +172,7 @@ class TransformerDecoderBase(FairseqIncrementalDecoder):
             )
 
     def build_decoder_layer(self, cfg, no_encoder_attn=False):
+        print(f'AR DB synth_decoder.py| about to build layer')
         layer = synthesizer_layer.SynthesizerDecoderLayerBase(cfg, no_encoder_attn)
         checkpoint = cfg.checkpoint_activations
         if checkpoint:

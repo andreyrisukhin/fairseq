@@ -448,6 +448,7 @@ class SynthesizerDecoderLayerBase(nn.Module):
         else:
             y = x
 
+        print(f'AR DB synth_layer.py| Synth Attn begin')
         # TODO need our Synthesizer Decoder Layer Base to use our own attn here
         # Copy paste the rest, instead of calling transformer... we call 
 
@@ -544,7 +545,7 @@ class SynthesizerDecoderLayerBase(nn.Module):
 
 
 # backward compatible with the legacy argparse format
-class TransformerDecoderLayer(TransformerDecoderLayerBase):
+class SynthesizerDecoderLayer(SynthesizerDecoderLayerBase):
     def __init__(
         self, args, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False
     ):
