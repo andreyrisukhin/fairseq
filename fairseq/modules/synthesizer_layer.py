@@ -238,6 +238,8 @@ class TransformerEncoderLayer(TransformerEncoderLayerBase):
         )
 
 
+from fairseq.modules import multihead_synthesizer
+
 class SynthesizerDecoderLayerBase(nn.Module):
     """Decoder layer block.
 
@@ -340,6 +342,10 @@ class SynthesizerDecoderLayerBase(nn.Module):
         self.need_attn = True
 
         self.onnx_trace = False
+
+        # AR added
+        self.multihead_synth_attn = multihead_synthesizer.SynthesizerDenseEinsumMH(self.embed_dim, cfg.decoder.ffn_embed_dim, self.nh)
+
 
     def build_fc1(self, input_dim, output_dim, q_noise, qn_block_size):
         return quant_noise(nn.Linear(input_dim, output_dim), q_noise, qn_block_size)
@@ -460,15 +466,40 @@ class SynthesizerDecoderLayerBase(nn.Module):
         # ABC repo is exactly what Hao did ^^^
         # Define new class, inherit from transformer
 
-        x, attn = self.self_attn(
-            query=x,
-            key=y,
-            value=y,
-            key_padding_mask=self_attn_padding_mask,
-            incremental_state=incremental_state,
-            need_weights=False,
-            attn_mask=self_attn_mask,
-        )
+        """ Default x, before attn """
+        # print(f'x type: {type(x)}') # Default is <class 'torch.Tensor'>
+        # print(f'x shape: {x.size()}') # torch.Size([512, 4, 512])
+
+        """ Synth x, after attn """
+        x, value = self.multihead_synth_attn.forward(x)
+        print(f'AR DB| after synth attn')
+        # When return x, value
+        print(f'AR DB| x size: {x.size()}') # [32, 2048, 512]
+
+        # When returning synth tuple
+        # # print(f'x type: {type(x)}') # <class 'tuple'>
+        # # print(f'x {x}') # (tensor([[[...]]])), why inside a tuple?
+        # # print(f'len x: {len(x)}') # 2 elements
+        # # print(f'x shape: {x.size()}')
+
+        """ Default x, after attn """
+        # x, attn = self.self_attn(
+        #     query=x,
+        #     key=y,
+        #     value=y,
+        #     key_padding_mask=self_attn_padding_mask,
+        #     incremental_state=incremental_state,
+        #     need_weights=False,
+        #     attn_mask=self_attn_mask,
+        # )
+        # print(f'x type: {type(x)}') # Default is <class 'torch.Tensor'>
+        # print(f'x shape: {x.size()}') # torch.Size([512, 4, 512])
+
+        # print(f'AR DB 483| before_x == x: {before_x == x}') # All false
+
+        # print(f'AR DB sl.py| x:{x}')
+        # print(f'             attn:{attn}') # None often, why?
+
         if self.c_attn is not None:
             tgt_len, bsz = x.size(0), x.size(1)
             x = x.view(tgt_len, bsz, self.nh, self.head_dim)
