@@ -60,21 +60,21 @@ class SynthesizerDenseEinsumMH(nn.Module):
         '''       
         # print(f'DB 123')
         # print(f'Inside get_energy_dense()')     
-        print(f'  x shape: {x.shape}') 
-        print(f'  w0 shape: {self.w0.shape}')
-        print(f'  b0 shape: {self.b0.shape}')
+        # print(f'  x shape: {x.shape}') 
+        # print(f'  w0 shape: {self.w0.shape}')
+        # print(f'  b0 shape: {self.b0.shape}')
         
         # Linear projection 1
         projectedReprOfTokens = torch.einsum('sbd,hdt->bhst', x, self.w0) + self.b0  # x same for all heads
         # changed above line when matching Fairseq inputs
         filteredRepOfTokens = torch.nn.functional.relu(projectedReprOfTokens)
-        print(f'  fRep shape: {filteredRepOfTokens.shape}')
-        print(f'  w1 shape: {self.w1.shape}') 
-        print(f'  b1 shape: {self.b1.shape}')
+        # print(f'  fRep shape: {filteredRepOfTokens.shape}')
+        # print(f'  w1 shape: {self.w1.shape}') 
+        # print(f'  b1 shape: {self.b1.shape}')
         
         # Linear projection 2
         energy = torch.einsum("bhst,htu->bhsu", filteredRepOfTokens, self.w1) + self.b1
-        print(f'  energy shape: {energy.shape}')
+        # print(f'  energy shape: {energy.shape}')
         
         return energy
 
@@ -92,14 +92,14 @@ class SynthesizerDenseEinsumMH(nn.Module):
         energy = self.get_energy_dense(x) 
         # attention = self.softmax(energy)  
 
-        print(f'value_w shape: {self.value_w.shape}')
-        print(f'value_b shape: {self.value_b.shape}')
+        # print(f'value_w shape: {self.value_w.shape}')
+        # print(f'value_b shape: {self.value_b.shape}')
 
         value = torch.einsum('sbd,hde->bhse', x, self.value_w) + self.value_b
 
-        print(f'energy shape: {energy.shape}')
+        # print(f'energy shape: {energy.shape}')
         # print(f'attention shape: {attention.shape}')
-        print(f'value shape: {value.shape}')
+        # print(f'value shape: {value.shape}')
 
         # out = torch.einsum('bhsu,bhud->bhsd', attention, value) # bmm, per head (h appears in output)
         # print(f'out shape: {out.shape}')

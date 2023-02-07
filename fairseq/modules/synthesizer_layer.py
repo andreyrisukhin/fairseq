@@ -399,9 +399,9 @@ class SynthesizerDecoderLayerBase(nn.Module):
         self.onnx_trace = True
 
     def residual_connection(self, x, residual):
-        print(f'AR DB residual_connection')
-        print(f'  x size: {x.size()}')
-        print(f'  residual size: {residual.size()}')
+        # print(f'AR DB residual_connection')
+        # print(f'  x size: {x.size()}')
+        # print(f'  residual size: {residual.size()}')
         
         return residual + x
 
@@ -472,7 +472,7 @@ class SynthesizerDecoderLayerBase(nn.Module):
         else:
             y = x
 
-        print(f'AR DB synth_layer.py| Synth Attn begin')
+        # print(f'AR DB synth_layer.py| Synth Attn begin')
         # TODO need our Synthesizer Decoder Layer Base to use our own attn here
         # Copy paste the rest, instead of calling transformer... we call 
 
@@ -486,13 +486,13 @@ class SynthesizerDecoderLayerBase(nn.Module):
 
         """ Default x, before attn """
         # print(f'x type: {type(x)}') # Default is <class 'torch.Tensor'>
-        print(f' input x size: {x.size()}') # torch.Size([512, 4, 512])
+        # print(f' input x size: {x.size()}') # torch.Size([512, 4, 512])
 
         """ Synth x, after attn """
-        x, value = self.multihead_synth_attn.forward(x)
-        print(f'AR DB| after synth attn')
-        # When return x, value
-        print(f'AR DB| x size: {x.size()}') # [32, 2048, 512]
+        # x, value = self.multihead_synth_attn.forward(x)
+        # print(f'AR DB| after synth attn')
+        # # When return x, value
+        # print(f'AR DB| x size: {x.size()}') # [32, 2048, 512]
 
         # When returning synth tuple
         # # print(f'x type: {type(x)}') # <class 'tuple'>
@@ -501,15 +501,15 @@ class SynthesizerDecoderLayerBase(nn.Module):
         # # print(f'x shape: {x.size()}')
 
         """ Default x, after attn """
-        # x, attn = self.self_attn(
-        #     query=x,
-        #     key=y,
-        #     value=y,
-        #     key_padding_mask=self_attn_padding_mask,
-        #     incremental_state=incremental_state,
-        #     need_weights=False,
-        #     attn_mask=self_attn_mask,
-        # )
+        x, attn = self.self_attn(
+            query=x,
+            key=y,
+            value=y,
+            key_padding_mask=self_attn_padding_mask,
+            incremental_state=incremental_state,
+            need_weights=False,
+            attn_mask=self_attn_mask,
+        )
         # print(f'x type: {type(x)}') # Default is <class 'torch.Tensor'>
         # print(f'x shape: {x.size()}') # torch.Size([512, 4, 512])
 

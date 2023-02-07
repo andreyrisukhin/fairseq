@@ -661,7 +661,7 @@ class SynthesizedMultiheadAttention(FairseqIncrementalDecoder):
 
         # ===== End Large Chunk
 
-        print(f'AR s_mha.py')
+        # print(f'AR s_mha.py')
         attn_weights, v = self.synth.forward(key)       
         attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz) # TODO this does nothing, semantic sugar?
 
