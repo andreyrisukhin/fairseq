@@ -11,7 +11,7 @@ from torch import Tensor
 
 from fairseq import utils
 from fairseq.models.transformer import TransformerConfig
-from fairseq.modules import LayerNorm, MultiheadAttention
+from fairseq.modules import LayerNorm, SynthesizedMultiheadAttention #MultiheadAttention
 from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
 
@@ -133,7 +133,7 @@ class TransformerEncoderLayerBase(nn.Module):
         self.fc2.bias = torch.nn.Parameter(new_fc2_bias)
 
     def build_self_attention(self, embed_dim, cfg):
-        return MultiheadAttention(
+        return SynthesizedMultiheadAttention(
             embed_dim,
             cfg.encoder.attention_heads,
             dropout=cfg.attention_dropout,
@@ -238,7 +238,7 @@ class TransformerEncoderLayer(TransformerEncoderLayerBase):
         )
 
 
-from fairseq.modules import multihead_synthesizer
+from fairseq.modules import multihead_synthesizer # The actual synth code. TODO: merge inside synthesized_multihead_attention
 
 class SynthesizerDecoderLayerBase(nn.Module):
     """Decoder layer block.
@@ -270,12 +270,16 @@ class SynthesizerDecoderLayerBase(nn.Module):
 
         self.cross_self_attention = cfg.cross_self_attention
 
+        # print(f'  AR DB before build_self_attn call')
+        # THIS is where second call to synth init happens
+        # Be extra careful of how these args are deconstructed, must extract dims in same way
         self.self_attn = self.build_self_attention(
             self.embed_dim,
             cfg,
             add_bias_kv=add_bias_kv,
             add_zero_attn=add_zero_attn,
         )
+        # print(f'  AR DB before init of self.attn_ln')
         self.attn_ln = (
             LayerNorm(self.embed_dim)
             if utils.safe_getattr(cfg, "scale_attn", False)
@@ -309,6 +313,8 @@ class SynthesizerDecoderLayerBase(nn.Module):
             self.encoder_attn = self.build_encoder_attention(self.embed_dim, cfg)
             self.encoder_attn_layer_norm = LayerNorm(self.embed_dim, export=cfg.export)
 
+        # print(f'  AR DB before ffn layernorm')
+
         self.ffn_layernorm = (
             LayerNorm(cfg.decoder.ffn_embed_dim)
             if utils.safe_getattr(cfg, "scale_fc", False)
@@ -324,6 +330,8 @@ class SynthesizerDecoderLayerBase(nn.Module):
             if utils.safe_getattr(cfg, "scale_resids", False)
             else None
         )
+
+        # print(f'  AR DB Before fc layers')
 
         self.fc1 = self.build_fc1(
             self.embed_dim,
@@ -344,7 +352,11 @@ class SynthesizerDecoderLayerBase(nn.Module):
         self.onnx_trace = False
 
         # AR added
-        self.multihead_synth_attn = multihead_synthesizer.SynthesizerDenseEinsumMH(self.embed_dim, cfg.decoder.ffn_embed_dim, self.nh)
+        # print(f'  AR DB Before assigning mh sythn attn')
+        SENTENCE_LENGTH_HARDCODE = 512
+        # self.multihead_synth_attn = multihead_synthesizer.SynthesizerDenseEinsumMH(self.embed_dim, cfg.decoder.ffn_embed_dim, self.nh) # Created (head_dim, in_dim, sent_len, heads) = [64,512,2048,8]
+        self.multihead_synth_attn = multihead_synthesizer.SynthesizerDenseEinsumMH(self.embed_dim, SENTENCE_LENGTH_HARDCODE, self.nh) # Goal: create [64, 512, 512, 8]
+        # print(f'  AR DB After assigning mh synth attn')
 
 
     def build_fc1(self, input_dim, output_dim, q_noise, qn_block_size):
@@ -356,9 +368,10 @@ class SynthesizerDecoderLayerBase(nn.Module):
     def build_self_attention(
         self, embed_dim, cfg, add_bias_kv=False, add_zero_attn=False
     ):
-        return MultiheadAttention(
-            embed_dim,
-            cfg.decoder.attention_heads,
+        return SynthesizedMultiheadAttention(
+            # Andrey added comments while debugging
+            embed_dim, # embed_dim
+            cfg.decoder.attention_heads, # num_heads
             dropout=cfg.attention_dropout,
             add_bias_kv=add_bias_kv,
             add_zero_attn=add_zero_attn,
@@ -366,10 +379,11 @@ class SynthesizerDecoderLayerBase(nn.Module):
             q_noise=self.quant_noise,
             qn_block_size=self.quant_noise_block_size,
             xformers_att_config=cfg.decoder.xformers_att_config,
+            # TODO where does sequence length come from? Hardcode default to 512, unsafe
         )
 
     def build_encoder_attention(self, embed_dim, cfg):
-        return MultiheadAttention(
+        return SynthesizedMultiheadAttention( # TODO check, should this also be Synth?
             embed_dim,
             cfg.decoder.attention_heads,
             kdim=cfg.encoder.embed_dim,
@@ -385,6 +399,10 @@ class SynthesizerDecoderLayerBase(nn.Module):
         self.onnx_trace = True
 
     def residual_connection(self, x, residual):
+        print(f'AR DB residual_connection')
+        print(f'  x size: {x.size()}')
+        print(f'  residual size: {residual.size()}')
+        
         return residual + x
 
     def forward(
@@ -468,7 +486,7 @@ class SynthesizerDecoderLayerBase(nn.Module):
 
         """ Default x, before attn """
         # print(f'x type: {type(x)}') # Default is <class 'torch.Tensor'>
-        # print(f'x shape: {x.size()}') # torch.Size([512, 4, 512])
+        print(f' input x size: {x.size()}') # torch.Size([512, 4, 512])
 
         """ Synth x, after attn """
         x, value = self.multihead_synth_attn.forward(x)

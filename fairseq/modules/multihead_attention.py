@@ -165,13 +165,14 @@ class MultiheadAttention(FairseqIncrementalDecoder):
         self.skip_embed_dim_check = False
         self.init_incremental_state()
 
-        # === Andrey Synth init Start ===
-        num_heads = self.num_heads
-        embed_dim = self.embed_dim # I think --share-decoder-input-output-embed in the train command implies embed_dim is identical?
-        sentence_length = 512 # TODO get automatically? # 2048 failed an assertion after attn_weight computation. # command has --tokens-per-sample 512, --max-tokens 2048
+        # # === Andrey Synth init Start ===
+        # print(f'Initialized synth in multihead_attention.py)
+        # num_heads = self.num_heads
+        # embed_dim = self.embed_dim # I think --share-decoder-input-output-embed in the train command implies embed_dim is identical?
+        # sentence_length = 512 # TODO get automatically? # 2048 failed an assertion after attn_weight computation. # command has --tokens-per-sample 512, --max-tokens 2048
         
-        self.synth = SynthesizerDenseEinsumMH(embed_dim, sentence_length, num_heads)
-        # === Andrey Synth init End ===
+        # self.synth = SynthesizerDenseEinsumMH(embed_dim, sentence_length, num_heads)
+        # # === Andrey Synth init End ===
 
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True

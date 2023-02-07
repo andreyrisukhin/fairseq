@@ -50,6 +50,7 @@ from .rotary_positional_embedding import RotaryPositionalEmbedding
 from .positional_encoding import (
     RelPositionalEncoding,
 )
+from .synthesized_multihead_attention import SynthesizedMultiheadAttention
 
 __all__ = [
     "AdaptiveInput",
@@ -89,6 +90,7 @@ __all__ = [
     "SamePad",
     "ScalarBias",
     "SinusoidalPositionalEmbedding",
+    "SynthesizedMultiheadAttention",
     "TransformerSentenceEncoderLayer",
     "TransformerSentenceEncoder",
     "TransformerDecoderLayer",

@@ -174,6 +174,7 @@ class TransformerDecoderBase(FairseqIncrementalDecoder):
     def build_decoder_layer(self, cfg, no_encoder_attn=False):
         print(f'AR DB synth_decoder.py| about to build layer')
         layer = synthesizer_layer.SynthesizerDecoderLayerBase(cfg, no_encoder_attn)
+        # print(f'AR BD after first layer')
         checkpoint = cfg.checkpoint_activations
         if checkpoint:
             offload_to_cpu = cfg.offload_activations
@@ -182,6 +183,7 @@ class TransformerDecoderBase(FairseqIncrementalDecoder):
         # checkpointed layer, regardless of layer size
         min_params_to_wrap = cfg.min_params_to_wrap if not checkpoint else 0
         layer = fsdp_wrap(layer, min_num_params=min_params_to_wrap)
+        # print(f'AR DB return, exiting')
         return layer
 
     def forward(
