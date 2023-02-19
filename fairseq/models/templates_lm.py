@@ -231,7 +231,7 @@ class TransformerLanguageModelConfig(FairseqDataclass):
 
 
 @register_model("synthesizer_lm", dataclass=TransformerLanguageModelConfig)
-class SynthesizerLanguageModel(FairseqLanguageModel):
+class TemplateLanguageModel(FairseqLanguageModel):
     # @classmethod
     # def hub_models(cls):
     #     def moses_fastbpe(path):
