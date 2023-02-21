@@ -11,7 +11,7 @@ from torch import Tensor
 
 from fairseq import utils
 from fairseq.models.transformer import TransformerConfig
-from fairseq.modules import LayerNorm, SynthesizedMultiheadAttention #MultiheadAttention
+from fairseq.modules import LayerNorm, TemplatizedMultiheadAttention #MultiheadAttention
 from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
 
@@ -133,7 +133,7 @@ class TransformerEncoderLayerBase(nn.Module):
         self.fc2.bias = torch.nn.Parameter(new_fc2_bias)
 
     def build_self_attention(self, embed_dim, cfg):
-        return SynthesizedMultiheadAttention(
+        return TemplatizedMultiheadAttention(
             embed_dim,
             cfg.encoder.attention_heads,
             dropout=cfg.attention_dropout,
@@ -238,9 +238,9 @@ class TransformerEncoderLayer(TransformerEncoderLayerBase):
         )
 
 
-from fairseq.modules import multihead_synthesizer # The actual synth code. TODO: merge inside synthesized_multihead_attention
+from fairseq.modules import multihead_templates # The actual synth code. TODO: merge inside synthesized_multihead_attention
 
-class SynthesizerDecoderLayerBase(nn.Module):
+class TemplatesDecoderLayerBase(nn.Module):
     """Decoder layer block.
 
     In the original paper each operation (multi-head attention, encoder
@@ -355,7 +355,7 @@ class SynthesizerDecoderLayerBase(nn.Module):
         # print(f'  AR DB Before assigning mh sythn attn')
         SENTENCE_LENGTH_HARDCODE = 512
         # self.multihead_synth_attn = multihead_synthesizer.SynthesizerDenseEinsumMH(self.embed_dim, cfg.decoder.ffn_embed_dim, self.nh) # Created (head_dim, in_dim, sent_len, heads) = [64,512,2048,8]
-        self.multihead_synth_attn = multihead_synthesizer.SynthesizerDenseEinsumMH(self.embed_dim, SENTENCE_LENGTH_HARDCODE, self.nh) # Goal: create [64, 512, 512, 8]
+        self.multihead_template_attn = multihead_templates.TemplatesManualMH(self.embed_dim, SENTENCE_LENGTH_HARDCODE, self.nh) # Goal: create [64, 512, 512, 8]
         # print(f'  AR DB After assigning mh synth attn')
 
 
@@ -368,7 +368,7 @@ class SynthesizerDecoderLayerBase(nn.Module):
     def build_self_attention(
         self, embed_dim, cfg, add_bias_kv=False, add_zero_attn=False
     ):
-        return SynthesizedMultiheadAttention(
+        return TemplatizedMultiheadAttention(
             # Andrey added comments while debugging
             embed_dim, # embed_dim
             cfg.decoder.attention_heads, # num_heads
@@ -383,7 +383,7 @@ class SynthesizerDecoderLayerBase(nn.Module):
         )
 
     def build_encoder_attention(self, embed_dim, cfg):
-        return SynthesizedMultiheadAttention( # TODO check, should this also be Synth?
+        return TemplatizedMultiheadAttention( # TODO check, should this also be Synth?
             embed_dim,
             cfg.decoder.attention_heads,
             kdim=cfg.encoder.embed_dim,
@@ -594,7 +594,7 @@ class SynthesizerDecoderLayerBase(nn.Module):
 
 
 # backward compatible with the legacy argparse format
-class SynthesizerDecoderLayer(SynthesizerDecoderLayerBase):
+class TemplatesDecoderLayer(TemplatesDecoderLayerBase):
     def __init__(
         self, args, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False
     ):

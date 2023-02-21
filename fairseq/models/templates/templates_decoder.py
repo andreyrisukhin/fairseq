@@ -22,7 +22,7 @@ from fairseq.modules import (
     LayerNorm,
     PositionalEmbedding,
     SinusoidalPositionalEmbedding,
-    synthesizer_layer,
+    templates_layer,
 )
 from fairseq.modules.checkpoint_activations import checkpoint_wrapper
 from fairseq.modules.quant_noise import quant_noise as apply_quant_noise_
@@ -172,8 +172,8 @@ class TransformerDecoderBase(FairseqIncrementalDecoder):
             )
 
     def build_decoder_layer(self, cfg, no_encoder_attn=False):
-        print(f'AR DB synth_decoder.py| about to build layer')
-        layer = synthesizer_layer.SynthesizerDecoderLayerBase(cfg, no_encoder_attn)
+        print(f'AR DB template_decoder.py| about to build layer')
+        layer = templates_layer.TemplatesDecoderLayerBase(cfg, no_encoder_attn)
         # print(f'AR BD after first layer')
         checkpoint = cfg.checkpoint_activations
         if checkpoint:

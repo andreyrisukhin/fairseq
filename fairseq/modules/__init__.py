@@ -51,6 +51,7 @@ from .positional_encoding import (
     RelPositionalEncoding,
 )
 from .synthesized_multihead_attention import SynthesizedMultiheadAttention
+from .templatized_multihead_attention import TemplatizedMultiheadAttention
 
 __all__ = [
     "AdaptiveInput",
@@ -91,6 +92,7 @@ __all__ = [
     "ScalarBias",
     "SinusoidalPositionalEmbedding",
     "SynthesizedMultiheadAttention",
+    "TemplatizedMultiheadAttention",
     "TransformerSentenceEncoderLayer",
     "TransformerSentenceEncoder",
     "TransformerDecoderLayer",
