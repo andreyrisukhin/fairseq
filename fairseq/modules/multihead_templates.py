@@ -34,31 +34,6 @@ class TemplatesManualMH(nn.Module):
         self.in_dims = in_dims
         self.head_dim = head_dim
 
-        ''' Weights and Biases for Multilayer Perceptron (linear, relu/other activation, linear) '''
-        self.w0 = Parameter(xavier_uniform_(empty(heads, in_dims, sentence_length,)))  # Linear 1 weights 
-        self.b0 = Parameter(constant_(empty(sentence_length,), 0.0))  # Linear 1 bias
-        self.w1 = Parameter(xavier_uniform_(empty(heads, sentence_length, sentence_length,))) # Lin 2 weights 
-        self.b1 = Parameter(constant_(empty(sentence_length,), 0.0))  # Linear 2 bias
-
-        self.softmax = nn.Softmax(dim=-1)
-
-        ''' Weights and Biases for Value Calculation '''
-        self.value_w = Parameter(xavier_uniform_(empty(heads, in_dims, head_dim,))) # Used in "value" calculation
-        self.value_b = Parameter(constant_(empty(head_dim,), 0.0)) # Need a bias vector for each attention head, stored here
-
-        # print(f'Initialized SynthDenseEinsum. indims={in_dims}, seqlen={sentence_length}')
-
-        ''' Templates are fixed, not learnable. 
-        TODO ask: Size = sentence_length x sentence_length x in_dims, each? 
-        
-        Big Bird templates:
-        > Random attention, with 2 random elements selected per row
-        > Window attention, width=3 diagonal
-        > Global attention, g=2 (Rotated L to cover left and top sides)
-        '''
-        
-        # Random attention
-        
         rng = np.random.default_rng()
 
         ''' Takes length, returns torch square zero matrix with 2 elements in each row set to 1.'''
@@ -71,21 +46,17 @@ class TemplatesManualMH(nn.Module):
                     row[i] = 1
             return torch.tensor(t)
 
-        ''' Takes dim, returns a square torch matrix with a diagonal of width. '''
+        ''' Takes dim, returns a square torch matrix with a diagonal of width w. '''
         def template_window(n:int, w:int=3):
             assert w <= n, f'Cannot have more inputs than allowed dimension'
             t = np.zeros((n, n))
             for rid, row in enumerate(t):
-                # for i in range(w): #range(start=rid-(w//2), stop=rid+(w//2)):
-                #     if rid+i-(w//2) < n and rid+i+(w//2) >= 0: # OOB condition
-                #     # if i < n and i >= 0: # OOB condition
-                #         row[i] = 1
                 for i in range(rid-(w//2), rid+(w//2)+1, 1):
                     if i < n and i >= 0: # OOB condition
                         row[i] = 1
-
             return torch.tensor(t)
 
+        ''' Takes dim, returns a square torch matrix with top/left g rows/columns assigned to 1. '''
         def template_global(n:int, g:int=2):
             assert g <= n, f'Cannot have more inputs than allowed dimension'
             t = np.zeros((n, n))
@@ -95,15 +66,43 @@ class TemplatesManualMH(nn.Module):
                 t.T[i] = global_line.copy() # Vertical line of 1s
             return torch.tensor(t)
 
-        t1 = template_random(n=10)# sentence_length)
-        t2 = template_window(n=10)# sentence_length)
-        t3 = template_global(n=10)# sentence_length)
+        t1 = template_random(n=sentence_length)
+        t2 = template_window(n=sentence_length)
+        t3 = template_global(n=sentence_length)
 
-        print(f'AR DB template reasonableness: ')
+        self.templates = [t1, t2, t3] # Array of tensors 
+        self.num_templates = len(self.templates)
+        
+        ''' Weights and Biases for Multilayer Perceptron (linear -> relu/other activation) '''
+        self.w0 = Parameter(xavier_uniform_(empty(heads, in_dims, sentence_length,)))  # Linear 1 weights 
+        self.b0 = Parameter(constant_(empty(sentence_length,), 0.0))  # Linear 1 bias
+        # self.w1 = Parameter(xavier_uniform_(empty(heads, sentence_length, sentence_length,))) # Lin 2 weights 
+        # self.b1 = Parameter(constant_(empty(sentence_length,), 0.0))  # Linear 2 bias
 
-        print(f't1: {t1}')
-        print(f't2: {t2}')
-        print(f't3: {t3}')
+        self.softmax = nn.Softmax(dim=-1)
+
+        # ''' Weights and Biases for Value Calculation '''
+        # self.value_w = Parameter(xavier_uniform_(empty(heads, in_dims, head_dim,))) # Used in "value" calculation
+        # self.value_b = Parameter(constant_(empty(head_dim,), 0.0)) # Need a bias vector for each attention head, stored here
+
+        # print(f'Initialized SynthDenseEinsum. indims={in_dims}, seqlen={sentence_length}')
+
+        ''' Templates are fixed, not learnable. 
+        TODO ask: Size = sentence_length x sentence_length x in_dims, each? 
+        
+        Big Bird templates:
+        > Random attention, with 2 random elements selected per row
+        > Window attention, width=3 diagonal
+        > Global attention, g=2 (Rotated L to cover left and top sides)
+        '''
+        
+    
+        # TODO Tensor of tensors idea if efficiency needed: torch.tensor(t1, t2, t3)
+
+        # print(f'AR DB template reasonableness: ')
+        # print(f't1: {t1}')
+        # print(f't2: {t2}')
+        # print(f't3: {t3}')
 
 
     def get_energy_dense(self, x): 
@@ -143,6 +142,13 @@ class TemplatesManualMH(nn.Module):
                 Saves us having to do softmax after summing over the templates
         '''
         
+
+        # project
+        # filter with relu
+        # attn weights
+        # softmax
+
+
         
         '''
         Parameters:
