@@ -11,7 +11,7 @@ from torch import Tensor
 
 from fairseq import utils
 from fairseq.models.transformer import TransformerConfig
-from fairseq.modules import LayerNorm, TemplatizedMultiheadAttention #MultiheadAttention
+from fairseq.modules import LayerNorm, TemplatesMultiheadAttention #MultiheadAttention
 from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
 
@@ -133,7 +133,7 @@ class TransformerEncoderLayerBase(nn.Module):
         self.fc2.bias = torch.nn.Parameter(new_fc2_bias)
 
     def build_self_attention(self, embed_dim, cfg):
-        return TemplatizedMultiheadAttention(
+        return TemplatesMultiheadAttention(
             embed_dim,
             cfg.encoder.attention_heads,
             dropout=cfg.attention_dropout,
@@ -368,7 +368,7 @@ class TemplatesDecoderLayerBase(nn.Module):
     def build_self_attention(
         self, embed_dim, cfg, add_bias_kv=False, add_zero_attn=False
     ):
-        return TemplatizedMultiheadAttention(
+        return TemplatesMultiheadAttention(
             # Andrey added comments while debugging
             embed_dim, # embed_dim
             cfg.decoder.attention_heads, # num_heads
@@ -383,7 +383,7 @@ class TemplatesDecoderLayerBase(nn.Module):
         )
 
     def build_encoder_attention(self, embed_dim, cfg):
-        return TemplatizedMultiheadAttention( # TODO check, should this also be Synth?
+        return TemplatesMultiheadAttention( # TODO check, should this also be Synth?
             embed_dim,
             cfg.decoder.attention_heads,
             kdim=cfg.encoder.embed_dim,

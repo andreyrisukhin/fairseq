@@ -63,7 +63,7 @@ def _mask_for_xformers(mask: Tensor, to_dtype: Optional[torch.dtype] = None):
     return mask
 
 
-class TemplatizedMultiheadAttention(FairseqIncrementalDecoder):
+class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
     """Multi-headed attention.
 
     See "Attention Is All You Need" for more details.

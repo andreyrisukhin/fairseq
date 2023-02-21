@@ -517,8 +517,8 @@ def base_lm_architecture(args):
 #     base_gpt3_architecture(args)
 
 
-@register_model_architecture("templates_lm", "templates_lm_templatized_attention")
-def templates_lm_templatized_attention(args):
+@register_model_architecture("templates_lm", "templates_lm_templates_attention")
+def templates_lm_templates_attention(args):
     # # TODO param count
     # args.decoder_layers = safe_getattr(args, "decoder_layers", 96)
     # args.decoder_embed_dim = safe_getattr(args, "decoder_embed_dim", 12288)
