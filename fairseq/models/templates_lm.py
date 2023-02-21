@@ -20,7 +20,7 @@ from fairseq.models import (
     register_model,
     register_model_architecture,
 )
-from fairseq.models.synthesizer_dense import (
+from fairseq.models.templates import (
     DEFAULT_MIN_PARAMS_TO_WRAP,
     Embedding,
     TransformerDecoder,
@@ -230,7 +230,7 @@ class TransformerLanguageModelConfig(FairseqDataclass):
     tpu: bool = II("common.tpu")
 
 
-@register_model("synthesizer_lm", dataclass=TransformerLanguageModelConfig)
+@register_model("templates_lm", dataclass=TransformerLanguageModelConfig)
 class TemplateLanguageModel(FairseqLanguageModel):
     # @classmethod
     # def hub_models(cls):
@@ -517,8 +517,8 @@ def base_lm_architecture(args):
 #     base_gpt3_architecture(args)
 
 
-@register_model_architecture("synthesizer_lm", "synthesizer_lm_synthesized_attention")
-def synthesizer_lm_synthesized_attention(args):
+@register_model_architecture("templates_lm", "templates_lm_templatized_attention")
+def templates_lm_templatized_attention(args):
     # # TODO param count
     # args.decoder_layers = safe_getattr(args, "decoder_layers", 96)
     # args.decoder_embed_dim = safe_getattr(args, "decoder_embed_dim", 12288)
