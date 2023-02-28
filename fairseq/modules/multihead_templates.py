@@ -49,37 +49,15 @@ class TemplatesManualMH(nn.Module):
         ''' Takes dim, returns a square torch matrix with a diagonal of width w. '''
         def template_window(n:int, w:int=3):
             assert w <= n, f'Cannot have more inputs than allowed dimension'
-            t = np.zeros((n, n))
             # From ABC repo for efficiency reasons
-            prior_attn_weights = torch.zeros((n,n))
+            prior_window_attn_weights = torch.zeros((n,n))
             radius = w//2
             for i in range(n):
                 start_idx = max(0, i - radius)
                 end_idx = min(n-1, i + radius)    
                 length = end_idx - start_idx + 1
-                prior_attn_weights[i, start_idx: end_idx + 1] = 1. / length
-
-            print(prior_attn_weights)
-
-            """
-            w=3
-            [1 1 0 0]
-            [1 1 1 0]
-            [0 1 1 1]
-            [0 0 1 1]
-
-            w=1
-            [1 0 0 0]
-            [0 1 0 0]
-            [0 0 1 0]
-            [0 0 0 1]
-            """
-
-            for rid, row in enumerate(t):
-                for i in range(rid-(w//2), rid+(w//2)+1, 1):
-                    if i < n and i >= 0: # OOB condition
-                        row[i] = 1
-            return torch.tensor(t)
+                prior_window_attn_weights[i, start_idx: end_idx + 1] = 1. / length
+            return prior_window_attn_weights
 
         ''' Takes dim, returns a square torch matrix with top/left g rows/columns assigned to 1. '''
         def template_global(n:int, g:int=2):
