@@ -37,7 +37,7 @@ class TemplatesManualMH(nn.Module):
         rng = np.random.default_rng()
 
         ''' Takes length, returns torch square zero matrix with 2 elements in each row set to 1.'''
-        def template_random(n:int, r:int=2):
+        def template_random(n:int, r:int=2) -> torch.tensor:
             assert r <= n, f'Cannot have more inputs than allowed dimension'
             t = np.zeros((n, n))
             for row in t:
@@ -50,6 +50,31 @@ class TemplatesManualMH(nn.Module):
         def template_window(n:int, w:int=3):
             assert w <= n, f'Cannot have more inputs than allowed dimension'
             t = np.zeros((n, n))
+            # From ABC repo for efficiency reasons
+            prior_attn_weights = torch.zeros((n,n))
+            radius = w//2
+            for i in range(n):
+                start_idx = max(0, i - radius)
+                end_idx = min(n-1, i + radius)    
+                length = end_idx - start_idx + 1
+                prior_attn_weights[i, start_idx: end_idx + 1] = 1. / length
+
+            print(prior_attn_weights)
+
+            """
+            w=3
+            [1 1 0 0]
+            [1 1 1 0]
+            [0 1 1 1]
+            [0 0 1 1]
+
+            w=1
+            [1 0 0 0]
+            [0 1 0 0]
+            [0 0 1 0]
+            [0 0 0 1]
+            """
+
             for rid, row in enumerate(t):
                 for i in range(rid-(w//2), rid+(w//2)+1, 1):
                     if i < n and i >= 0: # OOB condition
@@ -87,8 +112,7 @@ class TemplatesManualMH(nn.Module):
 
         # print(f'Initialized SynthDenseEinsum. indims={in_dims}, seqlen={sentence_length}')
 
-        ''' Templates are fixed, not learnable. 
-        TODO ask: Size = sentence_length x sentence_length x in_dims, each? 
+        ''' Templates are fixed, not learnable. All square, sent_len x sent_len, show how tokens attend to each other. 
         
         Big Bird templates:
         > Random attention, with 2 random elements selected per row
