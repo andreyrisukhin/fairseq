@@ -165,12 +165,12 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         self.skip_embed_dim_check = False
         self.init_incremental_state()
 
-        # === Andrey Synth init Start ===
-        num_heads = self.num_heads
+        # === Andrey Template init Start ===
+        # num_heads = self.num_heads
         embed_dim = self.embed_dim # I think --share-decoder-input-output-embed in the train command implies embed_dim is identical?
         sentence_length = 512 # TODO get automatically? # 2048 failed an assertion after attn_weight computation. # command has --tokens-per-sample 512, --max-tokens 2048
         
-        self.template = TemplatesManualMH(embed_dim, sentence_length, num_heads)
+        self.template = TemplatesManualMH(embed_dim, sentence_length) #, num_heads) # TODO bsz here?
         # TODO readdress
         # === Andrey Synth init End ===
 
@@ -663,7 +663,8 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         # ===== End Large Chunk
 
         # print(f'AR s_mha.py')
-        attn_weights, v = self.template.forward(key)       
+        # attn_weights, v = self.template.forward(key)
+        attn_weights = self.template.forward(key)
         attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz) # TODO this does nothing, semantic sugar?
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
@@ -697,7 +698,7 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
             # Roughly: (1) unpack to batches, unpack to kv_bsz, bool (TODO) -> value (-inf), repack.
 
-        # TODO check what this means and whether it triggers, synth definitely outputs nonsoftmaxed weights assuming softmax would be applied
+        # TODO check what this means and whether it triggers, template definitely outputs softmaxed weights.
         if before_softmax:
             return attn_weights, v
 

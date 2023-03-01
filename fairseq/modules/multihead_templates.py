@@ -75,7 +75,7 @@ class TemplatesManualMH(nn.Module):
 
         self.templates = [t1, t2, t3] # List of tensors 
         num_templates = len(self.templates)
-        HIDDEN_DIM = self.in_dims
+        HIDDEN_DIM = in_dims
 
         ''' Weights and Biases for Multilayer Perceptron (linear -> relu/other activation) '''
         self.w0 = Parameter(xavier_uniform_(empty(in_dims, HIDDEN_DIM,)))  # Linear 1 weights 
@@ -136,8 +136,17 @@ class TemplatesManualMH(nn.Module):
         '''
 
         # MLP
+        print(f'  x shape: {x.shape}')
+        print(f'  w0 shape: {self.w0.shape}') 
+        print(f'  b0 shape: {self.b0.shape}')
+                
         hiddenReprOfTokens = torch.einsum('sbd,hd->bsh', x, self.w0) + self.b0  # x same for all heads
         filteredRepOfTokens = torch.nn.functional.relu(hiddenReprOfTokens)
+        
+        print(f'  fRep shape: {filteredRepOfTokens.shape}')
+        print(f'  w1 shape: {self.w1.shape}') 
+        print(f'  b1 shape: {self.b1.shape}')
+        
         template_weights_unbound = torch.einsum('nhsb,bsh->n', self.w1, filteredRepOfTokens) + self.b1
         template_weights = self.softmax(template_weights_unbound)
         
@@ -146,8 +155,11 @@ class TemplatesManualMH(nn.Module):
                         template_weights[1] * self.templates[1] +
                         template_weights[2] * self.templates[2])
 
+        return attn_weights
+
         # Calculate the value using attention and x
         # value = torch.einsum('sbd,hde->bhse', x, self.value_w) + self.value_b
 
         # TODO modify below
-        return energy.contiguous().view((-1, self.seq_len, self.in_dims)), value.contiguous().view((-1, self.seq_len, self.head_dim))
+        # return energy.contiguous().view((-1, self.seq_len, self.in_dims)), value.contiguous().view((-1, self.seq_len, self.head_dim))
+
