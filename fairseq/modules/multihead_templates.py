@@ -120,17 +120,14 @@ class TemplatesManualMH(nn.Module):
 
         MLP output is [3, ]
         '''  
-        # project
-        # filter with relu
-        # attn weights
-        # softmax
-        
+            
         '''
         Parameters:
             x: Tensor (sequence length, batch size, dimension of token representation)
-        Return energy, value.
-        Assume that MHA.py will reuse softmax and masking machinery for template attention. Using templates_multihead_attention.py with minimal modification.
-
+        Return attention, value.
+        Assume that MHA.py will reuse masking machinery for template attention. Using templates_multihead_attention.py with minimal modification.
+        Softmax is no longer required, because enforced with softmax on rows and on weights. TODO prove
+        
         Fairseq's x [time, batch, channel] is [seq len, batch size, embed dim]. x looks like sbd
         '''
         
@@ -138,12 +135,19 @@ class TemplatesManualMH(nn.Module):
         h: hidden dimension TODO change to dedup 'head', maybe 'i' for intermediate?
         '''
 
+        # MLP
         hiddenReprOfTokens = torch.einsum('sbd,hd->bsh', x, self.w0) + self.b0  # x same for all heads
         filteredRepOfTokens = torch.nn.functional.relu(hiddenReprOfTokens)
         template_weights_unbound = torch.einsum('nhsb,bsh->n', self.w1, filteredRepOfTokens) + self.b1
         template_weights = self.softmax(template_weights_unbound)
         
-        # Calculate the attention using templates and weights
+        # Get Attention
+        attn_weights = (template_weights[0] * self.templates[0] + 
+                        template_weights[1] * self.templates[1] +
+                        template_weights[2] * self.templates[2])
+
+        # Calculate the value using attention and x
+        # value = torch.einsum('sbd,hde->bhse', x, self.value_w) + self.value_b
 
         # TODO modify below
         return energy.contiguous().view((-1, self.seq_len, self.in_dims)), value.contiguous().view((-1, self.seq_len, self.head_dim))

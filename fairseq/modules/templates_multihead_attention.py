@@ -170,7 +170,7 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         embed_dim = self.embed_dim # I think --share-decoder-input-output-embed in the train command implies embed_dim is identical?
         sentence_length = 512 # TODO get automatically? # 2048 failed an assertion after attn_weight computation. # command has --tokens-per-sample 512, --max-tokens 2048
         
-        self.synth = TemplatesManualMH(embed_dim, sentence_length, num_heads)
+        self.template = TemplatesManualMH(embed_dim, sentence_length, num_heads)
         # TODO readdress
         # === Andrey Synth init End ===
 
@@ -490,7 +490,7 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         attn_mask: Optional[Tensor] = None,
         before_softmax: bool = False,
         need_head_weights: bool = False,
-        AR_synth_mode: bool = False, # Added by Andrey for extension
+        AR_template_mode: bool = False, # Added by Andrey for extension
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time x Batch x Channel
 
@@ -514,7 +514,7 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         #   x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
         # query, key, value all share values, shape of [512, 4, 512], [seq_len, batch, embed_dim]
 
-        AR_synth_mode = True # For debug of Synth implementation
+        AR_template_mode = True # For debug of Template implementation
         # AR_TEMPLATE_MODE = False
 
         # Default implementation by Fairseq
@@ -663,7 +663,7 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         # ===== End Large Chunk
 
         # print(f'AR s_mha.py')
-        attn_weights, v = self.synth.forward(key)       
+        attn_weights, v = self.template.forward(key)       
         attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz) # TODO this does nothing, semantic sugar?
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
