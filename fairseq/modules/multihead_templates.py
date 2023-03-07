@@ -89,18 +89,19 @@ class TemplatesManualMH(nn.Module):
         ''' New templates. Subject to softmax, they each look like [s,], n of them.
         NO idea what they should be constructed as. Try (1) random, (2) front few, (3) back few.
         '''
+        DEVICE = 'cuda'
         def v2_random(s:int):
-            t = torch.rand((s,)).softmax(0)
+            t = torch.rand((s,), device=torch.device(DEVICE)).softmax(0)
             return t
         FRONT = 3
         BACK = 3
         def v2_first(s:int):
-            t = torch.rand((s,))
+            t = torch.rand((s,), device=torch.device(DEVICE))
             t[FRONT:] = 0 # Zero out latter
             t = torch.softmax(t,0)
             return t
         def v2_last(s:int):
-            t = torch.rand((s,))
+            t = torch.rand((s,), device=torch.device(DEVICE))
             t[:BACK] = 0 # Zero-out former
             t = torch.softmax(t,0)
             return t
@@ -109,7 +110,7 @@ class TemplatesManualMH(nn.Module):
         t2 = v2_first(s=sentence_length)
         t3 = v2_last(s=sentence_length)
 
-        self.templates = torch.stack((t1,t2,t3)) # [t1, t2, t3] # List of tensors 
+        self.templates = torch.stack((t1,t2,t3)).float() #.type("Float") # [t1, t2, t3] # List of tensors 
         num_templates = len(self.templates)
         HIDDEN_DIM = in_dims
 
@@ -120,6 +121,8 @@ class TemplatesManualMH(nn.Module):
         self.b1 = Parameter(constant_(empty(num_templates,), 0.0))  # Linear 2 bias; first dim instead of last, due to order of multiplication
 
         self.softmax = nn.Softmax(dim=-1)
+
+        # model.to(device) should be here, but not a model problem? How to get templates past this
 
         print(f'AR Template Init')
         print(f'  batch_size: {batch_size}') # ?
