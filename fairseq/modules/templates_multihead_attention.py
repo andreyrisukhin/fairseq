@@ -170,7 +170,7 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         embed_dim = self.embed_dim # I think --share-decoder-input-output-embed in the train command implies embed_dim is identical?
         sentence_length = 512 # TODO get automatically? # 2048 failed an assertion after attn_weight computation. # command has --tokens-per-sample 512, --max-tokens 2048
         
-        self.template = TemplatesManualMH(embed_dim, sentence_length) #, num_heads) # TODO bsz here?
+        self.template = TemplatesManualMH(in_dims=embed_dim, sentence_length=sentence_length, heads=num_heads)
         # TODO readdress
         # === Andrey Synth init End ===
 

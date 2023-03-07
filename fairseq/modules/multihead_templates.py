@@ -9,7 +9,7 @@ import numpy as np
 
 # Multihead Dense Synthesizer in Einsum
 class TemplatesManualMH(nn.Module):
-    def __init__(self, in_dims, sentence_length, batch_size:int=1):             
+    def __init__(self, in_dims, sentence_length, heads:int=1):             
         '''
         MLP to learn the weights of templates for different input tokens.
         '''
@@ -41,8 +41,6 @@ class TemplatesManualMH(nn.Module):
             This interpretation connects to softmax attn better
             Each token associates with a set of n coefficients (token 1 -> {a[1], b[1], c[1]})
         
-        # TODO Store templates as a tensor, n x s
-
         Big Bird templates:
         > Random attention, with 2 random elements selected per row
         > Window attention, width=3 diagonal
@@ -110,12 +108,20 @@ class TemplatesManualMH(nn.Module):
         t2 = v2_first(s=sentence_length)
         t3 = v2_last(s=sentence_length)
 
+        print(f'AR type t3: {t3.type()}')
+
         self.templates = torch.stack((t1,t2,t3)).float() #.type("Float") # [t1, t2, t3] # List of tensors 
+        print(f'AR type templates: {self.templates.type()}')
+
+        head_dim = in_dims // heads 
+        assert (head_dim * heads == in_dims), "embed in_dims must be divisible by number of heads"
         num_templates = len(self.templates)
         HIDDEN_DIM = in_dims
+        self.in_dims = in_dims
+        self.seq_len = sentence_length
 
         ''' Weights and Biases for Multilayer Perceptron (linear -> relu/other activation) '''
-        self.w0 = Parameter(xavier_uniform_(empty(in_dims, HIDDEN_DIM,)))  # Linear 1 weights 
+        self.w0 = Parameter(xavier_uniform_(empty(heads, in_dims, HIDDEN_DIM,)))  # Linear 1 weights 
         self.b0 = Parameter(constant_(empty(HIDDEN_DIM,), 0.0))  # Linear 1 bias
         self.w1 = Parameter(xavier_uniform_(empty(HIDDEN_DIM, num_templates,))) # Lin 2 weights 
         self.b1 = Parameter(constant_(empty(num_templates,), 0.0))  # Linear 2 bias; first dim instead of last, due to order of multiplication
@@ -125,7 +131,7 @@ class TemplatesManualMH(nn.Module):
         # model.to(device) should be here, but not a model problem? How to get templates past this
 
         print(f'AR Template Init')
-        print(f'  batch_size: {batch_size}') # ?
+        print(f'  heads: {heads}')
         print(f'  in_dims: {in_dims}') # 512
         print(f'  sentence_len: {sentence_length}') # 512  # 2048 (b/c --max-tokens) did not pass the assertion # TODO ASK HAO, unless 2048 is max input and we project down to output 512? Feels unlikely, no longer seq2seq of same length, but ask
         print(f'  hidden_dim: {HIDDEN_DIM}') # in_dims
@@ -169,32 +175,36 @@ class TemplatesManualMH(nn.Module):
         '''      
 
         # MLP
-        print(f'  x shape: {x.shape}')
-        print(f'  w0 shape: {self.w0.shape}') 
-        print(f'  b0 shape: {self.b0.shape}')
+        # print(f'  x shape: {x.shape}')
+        # print(f'  w0 shape: {self.w0.shape}') 
+        # print(f'  b0 shape: {self.b0.shape}')
                 
-        hiddenReprOfTokens = torch.einsum('sbe,ew->bsw', x, self.w0) + self.b0  # x same for all heads
+        hiddenReprOfTokens = torch.einsum('sbe,hew->bhsw', x, self.w0) + self.b0  # x same for all heads
         filteredRepOfTokens = torch.nn.functional.relu(hiddenReprOfTokens)
         
-        print(f'  fRep shape: {filteredRepOfTokens.shape}')
-        print(f'  w1 shape: {self.w1.shape}') 
-        print(f'  b1 shape: {self.b1.shape}')
+        # print(f'  fRep shape: {filteredRepOfTokens.shape}')
+        # print(f'  w1 shape: {self.w1.shape}') 
+        # print(f'  b1 shape: {self.b1.shape}')
         
-        templateReprWeights = torch.einsum('wn,bsw->bsn', self.w1, filteredRepOfTokens) + self.b1
+        templateReprWeights = torch.einsum('wn,bhsw->bhsn', self.w1, filteredRepOfTokens) + self.b1
         # template_weights = self.softmax(template_weights_unbound)
         
-        print(f'  templateRep shape: {templateReprWeights.shape}')
+        # print(f'  templateRep shape: {templateReprWeights.shape}')
 
-        attnWeights = torch.einsum('bsn,nt->bst', templateReprWeights, self.templates) # Just a multiplication, no parameters to learn
+        # print(f'type self.templates: {self.templates.type()}')
+        # print(f'type reprWeights: {templateReprWeights.type()}')
+
+        attnWeights = torch.einsum('bhsn,nt->bhst', templateReprWeights, self.templates.half()) # Just a multiplication, no parameters to learn
 
         # # Get Attention
         # attn_weights = (template_weights[0] * self.templates[0] + 
         #                 template_weights[1] * self.templates[1] +
         #                 template_weights[2] * self.templates[2])
 
-        print(f'  attnWeights shape: {attnWeights.shape}')
+        # print(f'  attnWeights shape: {attnWeights.shape}')
 
-        return attnWeights #attn_weights
+        return attnWeights.contiguous().view((-1, self.seq_len, self.in_dims))
+         #attn_weights
 
         # Calculate the value using attention and x
         # value = torch.einsum('sbd,hde->bhse', x, self.value_w) + self.value_b
