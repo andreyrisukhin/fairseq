@@ -23,19 +23,23 @@ class TemplatesManualMH(nn.Module):
             n = number of templates
             h = number of heads
         
-        Computation
-            (1) bse (input), ew -> bsw
-            (2) wn, bsw -> bsn
-            (3) bsn, ns -> bss where ns: n templates, each shape s
-
-
-        TODO for multihead (once above works, upgrade)
+        Computation for multihead
             (1) bse (input), hew -> bhsw
             (2) wn, bhsw -> bhsn
             (3) bhsn, ns -> bhss where ns: n templates, each shape s
+
+        TODO fix w1 being different for each head
+            (1) bse (input), hew -> bhsw
+            (2) wnt, bhsw -> bhsn
+            (3) bhsn, ns -> bhss where ns: n templates, each shape s
         '''
         super(TemplatesManualMH, self).__init__() # ASK why not super().__init()__
-        rng = np.random.default_rng()
+        SEED = 409
+        rng = np.random.default_rng(SEED)
+        # torch.manual_seed(SEED)
+        # torch.cuda.manual_seed(SEED)
+        # torch.backends.cudnn.deterministic = True
+        # torch.backends.cudnn.benchmark = False
         ''' Templates are fixed, not learnable. 
         New interpretation: n templates, each s, where s is set of coefficients.
             This interpretation connects to softmax attn better
@@ -89,29 +93,37 @@ class TemplatesManualMH(nn.Module):
         '''
         DEVICE = 'cuda'
         def v2_random(s:int):
+            torch.manual_seed(SEED)
             t = torch.rand((s,), device=torch.device(DEVICE)).softmax(0)
             return t
         FRONT = 3
         BACK = 3
         def v2_first(s:int):
+            torch.manual_seed(SEED)
             t = torch.rand((s,), device=torch.device(DEVICE))
             t[FRONT:] = 0 # Zero out latter
             t = torch.softmax(t,0)
             return t
         def v2_last(s:int):
+            torch.manual_seed(SEED)
             t = torch.rand((s,), device=torch.device(DEVICE))
             t[:BACK] = 0 # Zero-out former
             t = torch.softmax(t,0)
             return t
 
-        t1 = v2_random(s=sentence_length)
+        t1 = v2_random(s=sentence_length) # Likely want to repeat this for s times, as in big bird
+
+        # 2 + s + s + s templates in this 1d slice version (front, back, rand, global, window)
+
         t2 = v2_first(s=sentence_length)
         t3 = v2_last(s=sentence_length)
 
-        print(f'AR type t3: {t3.type()}')
+        # print(f'AR type t3: {t3.type()}')
 
-        self.templates = torch.stack((t1,t2,t3)).float() #.type("Float") # [t1, t2, t3] # List of tensors 
-        print(f'AR type templates: {self.templates.type()}')
+        self.templates = torch.stack((t1,t2,t3))#.float() #.type("Float") # [t1, t2, t3] # List of tensors 
+        # print(f'AR type templates: {self.templates.type()}')
+   
+        # print(f't1[0]: {t1[0]}\n') Confirmed that template t1 seeded as expected by noticing first element was identical
 
         head_dim = in_dims // heads 
         assert (head_dim * heads == in_dims), "embed in_dims must be divisible by number of heads"
@@ -123,7 +135,7 @@ class TemplatesManualMH(nn.Module):
         ''' Weights and Biases for Multilayer Perceptron (linear -> relu/other activation) '''
         self.w0 = Parameter(xavier_uniform_(empty(heads, in_dims, HIDDEN_DIM,)))  # Linear 1 weights 
         self.b0 = Parameter(constant_(empty(HIDDEN_DIM,), 0.0))  # Linear 1 bias
-        self.w1 = Parameter(xavier_uniform_(empty(HIDDEN_DIM, num_templates,))) # Lin 2 weights 
+        self.w1 = Parameter(xavier_uniform_(empty(HIDDEN_DIM, num_templates, sentence_length,))) # Lin 2 weights 
         self.b1 = Parameter(constant_(empty(num_templates,), 0.0))  # Linear 2 bias; first dim instead of last, due to order of multiplication
 
         self.softmax = nn.Softmax(dim=-1)
@@ -186,7 +198,7 @@ class TemplatesManualMH(nn.Module):
         # print(f'  w1 shape: {self.w1.shape}') 
         # print(f'  b1 shape: {self.b1.shape}')
         
-        templateReprWeights = torch.einsum('wn,bhsw->bhsn', self.w1, filteredRepOfTokens) + self.b1
+        templateReprWeights = torch.einsum('wnt,bhsw->bhsn', self.w1, filteredRepOfTokens) + self.b1
         # template_weights = self.softmax(template_weights_unbound)
         
         # print(f'  templateRep shape: {templateReprWeights.shape}')
@@ -195,6 +207,15 @@ class TemplatesManualMH(nn.Module):
         # print(f'type reprWeights: {templateReprWeights.type()}')
 
         attnWeights = torch.einsum('bhsn,nt->bhst', templateReprWeights, self.templates.half()) # Just a multiplication, no parameters to learn
+
+        # n x t, 1D templates <- try this for now, get baseline, if trouble
+        # n x s x t (s==t), 2D templates <- big bird style
+        # There is a connection between these. Could still build sxs matrices, perhaps 
+        # Could index a given row for each token; concat that vector with other templates as we are doing
+
+        # Add a given token's window row on top of the nt templates. 
+
+        # Could implement in a batched way! Change self.templates and 200 nt to snt, 192 use different weights to different tasks
 
         # # Get Attention
         # attn_weights = (template_weights[0] * self.templates[0] + 
