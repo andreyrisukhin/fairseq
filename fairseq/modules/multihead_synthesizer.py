@@ -17,6 +17,12 @@ class SynthesizerDenseEinsumMH(nn.Module):
             t = sentence length, distinct dimension from 's' 
             u = sentence length, distinct values from 's', 't' (needed in second linear projection)
             h = attention heads
+            w = hidden layer
+
+            Testing hidden layer of 64, new einsums:
+              (1) sbd, hdw -> bhsw  Into hidden repr
+              (2) bhsw, hwu -> bhsu Into attn weight
+
 
         TODO best style: seq_len, batch, head, ...; this is due to gains by looping through tokens when decoding
         '''
@@ -36,11 +42,12 @@ class SynthesizerDenseEinsumMH(nn.Module):
         self.seq_len = sentence_length
         self.in_dims = in_dims
         self.head_dim = head_dim
+        w_hidden_layer = 64
 
         ''' Weights and Biases for Linear Layers '''
-        self.w0 = Parameter(xavier_uniform_(empty(heads, in_dims, sentence_length,)))  # Linear 1 weights 
-        self.b0 = Parameter(constant_(empty(sentence_length,), 0.0))  # Linear 1 bias
-        self.w1 = Parameter(xavier_uniform_(empty(heads, sentence_length, sentence_length,))) # Lin 2 weights 
+        self.w0 = Parameter(xavier_uniform_(empty(heads, in_dims, w_hidden_layer,)))  # Linear 1 weights 
+        self.b0 = Parameter(constant_(empty(w_hidden_layer,), 0.0))  # Linear 1 bias
+        self.w1 = Parameter(xavier_uniform_(empty(heads, w_hidden_layer, sentence_length,))) # Lin 2 weights 
         self.b1 = Parameter(constant_(empty(sentence_length,), 0.0))  # Linear 2 bias
 
         self.softmax = nn.Softmax(dim=-1)
@@ -65,7 +72,7 @@ class SynthesizerDenseEinsumMH(nn.Module):
         # print(f'  b0 shape: {self.b0.shape}')
         
         # Linear projection 1
-        projectedReprOfTokens = torch.einsum('sbd,hdt->bhst', x, self.w0) + self.b0  # x same for all heads
+        projectedReprOfTokens = torch.einsum('sbd,hdw->bhsw', x, self.w0) + self.b0  # x same for all heads
         # changed above line when matching Fairseq inputs
         filteredRepOfTokens = torch.nn.functional.relu(projectedReprOfTokens)
         # print(f'  fRep shape: {filteredRepOfTokens.shape}')
@@ -73,7 +80,7 @@ class SynthesizerDenseEinsumMH(nn.Module):
         # print(f'  b1 shape: {self.b1.shape}')
         
         # Linear projection 2
-        energy = torch.einsum("bhst,htu->bhsu", filteredRepOfTokens, self.w1) + self.b1
+        energy = torch.einsum("bhsw,hwu->bhsu", filteredRepOfTokens, self.w1) + self.b1
         # print(f'  energy shape: {energy.shape}')
         
         return energy

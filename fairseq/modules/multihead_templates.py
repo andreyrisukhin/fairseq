@@ -28,10 +28,16 @@ class TemplatesManualMH(nn.Module):
             (2) wn, bhsw -> bhsn
             (3) bhsn, ns -> bhss where ns: n templates, each shape s
 
-        TODO fix w1 being different for each head
+        Andrey incorrectly fixed w1 being different for each head
             (1) bse (input), hew -> bhsw
             (2) wnt, bhsw -> bhsn
             (3) bhsn, ns -> bhss where ns: n templates, each shape s
+
+        This is the correction for different w1 and b1 per head
+            (1) bse, hew -> bhsw
+            (2) wnh, 
+            (3) , -> bhss
+
         '''
         super(TemplatesManualMH, self).__init__() # ASK why not super().__init()__
         SEED = 409
