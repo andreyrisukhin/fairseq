@@ -34,9 +34,9 @@ class TemplatesManualMH(nn.Module):
             (3) bhsn, ns -> bhss where ns: n templates, each shape s
 
         This is the correction for different w1 and b1 per head
-            (1) bse, hew -> bhsw
-            (2) wnh, 
-            (3) , -> bhss
+            (1) bse, hew -> bhsw  Into hidden repr
+            (2) wnh,         Into 
+            (3) , -> bhss   Into attention weights
 
         '''
         super(TemplatesManualMH, self).__init__() # ASK why not super().__init()__
@@ -117,6 +117,19 @@ class TemplatesManualMH(nn.Module):
             t = torch.softmax(t,0)
             return t
 
+        def template_window(s:int, w:int=3):
+            assert w <= s, f'Cannot have more inputs than allowed dimension'
+            # From ABC repo for efficiency reasons
+            prior_window_attn_weights = torch.zeros((s,s))
+            radius = w//2
+            for i in range(s):
+                start_idx = max(0, i - radius)
+                end_idx = min(s-1, i + radius)    
+                length = end_idx - start_idx + 1
+                prior_window_attn_weights[i, start_idx: end_idx + 1] = 1. / length
+            return prior_window_attn_weights
+
+
         t1 = v2_random(s=sentence_length) # Likely want to repeat this for s times, as in big bird
 
         # 2 + s + s + s templates in this 1d slice version (front, back, rand, global, window)
@@ -127,6 +140,11 @@ class TemplatesManualMH(nn.Module):
         # print(f'AR type t3: {t3.type()}')
 
         self.templates = torch.stack((t1,t2,t3))#.float() #.type("Float") # [t1, t2, t3] # List of tensors 
+        
+        t4 = template_window(s=sentence_length, w=3)
+        self.templates = torch.cat((self.templates, t4), dim=0)
+
+        
         # print(f'AR type templates: {self.templates.type()}')
    
         # print(f't1[0]: {t1[0]}\n') Confirmed that template t1 seeded as expected by noticing first element was identical
@@ -141,7 +159,7 @@ class TemplatesManualMH(nn.Module):
         ''' Weights and Biases for Multilayer Perceptron (linear -> relu/other activation) '''
         self.w0 = Parameter(xavier_uniform_(empty(heads, in_dims, HIDDEN_DIM,)))  # Linear 1 weights 
         self.b0 = Parameter(constant_(empty(HIDDEN_DIM,), 0.0))  # Linear 1 bias
-        self.w1 = Parameter(xavier_uniform_(empty(HIDDEN_DIM, num_templates, sentence_length,))) # Lin 2 weights 
+        self.w1 = Parameter(xavier_uniform_(empty(HIDDEN_DIM, num_templates, heads,))) # Lin 2 weights 
         self.b1 = Parameter(constant_(empty(num_templates,), 0.0))  # Linear 2 bias; first dim instead of last, due to order of multiplication
 
         self.softmax = nn.Softmax(dim=-1)
@@ -204,7 +222,7 @@ class TemplatesManualMH(nn.Module):
         # print(f'  w1 shape: {self.w1.shape}') 
         # print(f'  b1 shape: {self.b1.shape}')
         
-        templateReprWeights = torch.einsum('wnt,bhsw->bhsn', self.w1, filteredRepOfTokens) + self.b1
+        templateReprWeights = torch.einsum('wnh,bhsw->bhsn', self.w1, filteredRepOfTokens) + self.b1
         # template_weights = self.softmax(template_weights_unbound)
         
         # print(f'  templateRep shape: {templateReprWeights.shape}')

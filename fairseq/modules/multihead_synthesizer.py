@@ -42,12 +42,14 @@ class SynthesizerDenseEinsumMH(nn.Module):
         self.seq_len = sentence_length
         self.in_dims = in_dims
         self.head_dim = head_dim
-        w_hidden_layer = 64
+        w_hidden_layer = 64 # head_dim
 
         ''' Weights and Biases for Linear Layers '''
         self.w0 = Parameter(xavier_uniform_(empty(heads, in_dims, w_hidden_layer,)))  # Linear 1 weights 
-        self.b0 = Parameter(constant_(empty(w_hidden_layer,), 0.0))  # Linear 1 bias
+        # self.b0 = Parameter(constant_(empty(w_hidden_layer,), 0.0))  # Linear 1 bias
+        self.b0 = Parameter(constant_(empty(w_hidden_layer,), 0.0))  # Linear 1 bias, bhsw
         self.w1 = Parameter(xavier_uniform_(empty(heads, w_hidden_layer, sentence_length,))) # Lin 2 weights 
+        # self.b1 = Parameter(constant_(empty(sentence_length,), 0.0))  # Linear 2 bias
         self.b1 = Parameter(constant_(empty(sentence_length,), 0.0))  # Linear 2 bias
 
         self.softmax = nn.Softmax(dim=-1)
