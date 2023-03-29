@@ -120,7 +120,7 @@ class TemplatesManualMH(nn.Module):
         def template_window(s:int, w:int=3):
             assert w <= s, f'Cannot have more inputs than allowed dimension'
             # From ABC repo for efficiency reasons
-            prior_window_attn_weights = torch.zeros((s,s))
+            prior_window_attn_weights = torch.zeros((s,s), device=torch.device(DEVICE))
             radius = w//2
             for i in range(s):
                 start_idx = max(0, i - radius)
