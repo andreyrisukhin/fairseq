@@ -7,12 +7,9 @@ from torch import empty
 
 import numpy as np
 
-# Multihead Dense Synthesizer in Einsum
 class TemplatesManualMH(nn.Module):
     def __init__(self, in_dims, sentence_length, heads:int=1):             
-        '''
-        MLP to learn the weights of templates for different input tokens.
-        '''
+        ''' MLP to learn the weights of templates for different input tokens. '''
         '''
         Einsum indicies and what they represent
             b = batch size
@@ -23,21 +20,10 @@ class TemplatesManualMH(nn.Module):
             n = number of templates
             h = number of heads
         
-        Computation for multihead
-            (1) bse (input), hew -> bhsw
-            (2) wn, bhsw -> bhsn
-            (3) bhsn, ns -> bhss where ns: n templates, each shape s
-
-        Andrey incorrectly fixed w1 being different for each head
-            (1) bse (input), hew -> bhsw
-            (2) wnt, bhsw -> bhsn
-            (3) bhsn, ns -> bhss where ns: n templates, each shape s
-
-        This is the correction for different w1 and b1 per head
+        Computation for multihead (different w1 and b1 per head)
             (1) bse, hew -> bhsw  Into hidden repr
-            (2) wnh,         Into 
-            (3) , -> bhss   Into attention weights
-
+            (2) wnh,bhsw->bhsn Into template weights
+            (3) bhsn, nt -> bhst   Into attention weights
         '''
         super(TemplatesManualMH, self).__init__() # ASK why not super().__init()__
         SEED = 409
@@ -121,33 +107,28 @@ class TemplatesManualMH(nn.Module):
             assert w <= s, f'Cannot have more inputs than allowed dimension'
             # From ABC repo for efficiency reasons
             prior_window_attn_weights = torch.zeros((s,s), device=torch.device(DEVICE))
-            radius = w//2
             for i in range(s):
-                start_idx = max(0, i - radius)
-                end_idx = min(s-1, i + radius)    
-                length = end_idx - start_idx + 1
-                prior_window_attn_weights[i, start_idx: end_idx + 1] = 1. / length
+                # TODO answer Q about padding, cold starting
+                start_idx = max(0, i-w)
+                prior_window_attn_weights[i, start_idx:i+1] = 1. / w 
+                # TODO check this is what we want, in work.py file (off by 0x01)
             return prior_window_attn_weights
 
+            # Old code, broke causality guarantee
+            # radius = w//2
+            # for i in range(s):
+            #     start_idx = max(0, i - radius)
+            #     end_idx = min(s-1, i + radius)    
+            #     length = end_idx - start_idx + 1
+            #     prior_window_attn_weights[i, start_idx: end_idx + 1] = 1. / length
+            # return prior_window_attn_weights
 
         t1 = v2_random(s=sentence_length) # Likely want to repeat this for s times, as in big bird
-
-        # 2 + s + s + s templates in this 1d slice version (front, back, rand, global, window)
-
         t2 = v2_first(s=sentence_length)
         t3 = v2_last(s=sentence_length)
-
-        # print(f'AR type t3: {t3.type()}')
-
         self.templates = torch.stack((t1,t2,t3))#.float() #.type("Float") # [t1, t2, t3] # List of tensors 
-        
         t4 = template_window(s=sentence_length, w=3)
         self.templates = torch.cat((self.templates, t4), dim=0)
-
-        
-        # print(f'AR type templates: {self.templates.type()}')
-   
-        # print(f't1[0]: {t1[0]}\n') Confirmed that template t1 seeded as expected by noticing first element was identical
 
         head_dim = in_dims // heads 
         assert (head_dim * heads == in_dims), "embed in_dims must be divisible by number of heads"
@@ -158,24 +139,32 @@ class TemplatesManualMH(nn.Module):
 
         ''' Weights and Biases for Multilayer Perceptron (linear -> relu/other activation) '''
         self.w0 = Parameter(xavier_uniform_(empty(heads, in_dims, HIDDEN_DIM,)))  # Linear 1 weights 
-        self.b0 = Parameter(constant_(empty(HIDDEN_DIM,), 0.0))  # Linear 1 bias
+        self.b0 = Parameter(constant_(empty(heads, HIDDEN_DIM,), 0.0))  # Linear 1 bias
         self.w1 = Parameter(xavier_uniform_(empty(HIDDEN_DIM, num_templates, heads,))) # Lin 2 weights 
-        self.b1 = Parameter(constant_(empty(num_templates,), 0.0))  # Linear 2 bias; first dim instead of last, due to order of multiplication
+        self.b1 = Parameter(constant_(empty(heads, num_templates,), 0.0))  # Linear 2 bias; first dim instead of last, due to order of multiplication
 
         self.softmax = nn.Softmax(dim=-1)
 
-        # model.to(device) should be here, but not a model problem? How to get templates past this
+        """ March 29 2023 notes
+        Templates 1) sliding window depends on pos, 2) others do not <-- these may not be sensible
+        > Keep them seperate
+        > 1) does not need to be indexed
+        > 2) indexing. Look at batched ways to index in pytorch. High level: pass indices to tensor as another tensor, use indexing tensor
+            - Easy to make mistakes
+            - "Indexing a tensor using tensor/list in PyTorch"
+
+        Once get sliding window for each location, concat with first 3 templates, then do einsum
+
+        Template weighting may need a softmax on the weighting; put softmax on the weighting
+
+        self.templates shape would need to be different, to have [4, <something>] with the indexed sliding window template        
+        """
 
         print(f'AR Template Init')
         print(f'  heads: {heads}')
         print(f'  in_dims: {in_dims}') # 512
         print(f'  sentence_len: {sentence_length}') # 512  # 2048 (b/c --max-tokens) did not pass the assertion # TODO ASK HAO, unless 2048 is max input and we project down to output 512? Feels unlikely, no longer seq2seq of same length, but ask
         print(f'  hidden_dim: {HIDDEN_DIM}') # in_dims
-                
-        # print(f'AR DB template reasonableness: ')
-        # print(f't1: {t1}')
-        # print(f't2: {t2}')
-        # print(f't3: {t3}')
 
     def forward(self, x): 
         '''
@@ -190,66 +179,30 @@ class TemplatesManualMH(nn.Module):
         The MLP is a function: output is [num_templates, ] vector weighing the fixed templates
         MLP input is [bsz, seqlen, embed_dim] 
         (all heads take the same input; different MLP for each head, init random, but take same input)
-        Hidden layer is hyperparam set by dev, not tied to input or output layers
-        > start with something similar to input size; questions about this are empirical, can be tuned
-
         MLP should work with any seq len, batch size
-
-        Reconsider having first matrix batch size, seq len, look at synth
-
-        MLP output is [3, ]
         '''  
             
         '''
         Parameters:
             x: Tensor (sequence length, batch size, dimension of token representation)
+            Fairseq's x [time, batch, channel] is [seq len, batch size, embed dim]. x looks like sbd
         Return attention, value.
         Assume that MHA.py will reuse masking machinery for template attention. Using templates_multihead_attention.py with minimal modification.
         Softmax is no longer required, because enforced with softmax on rows and on weights. TODO prove
-        
-        Fairseq's x [time, batch, channel] is [seq len, batch size, embed dim]. x looks like sbd
         '''      
-
-        # MLP
-        # print(f'  x shape: {x.shape}')
-        # print(f'  w0 shape: {self.w0.shape}') 
-        # print(f'  b0 shape: {self.b0.shape}')
                 
-        hiddenReprOfTokens = torch.einsum('sbe,hew->bhsw', x, self.w0) + self.b0  # x same for all heads
+        hiddenReprOfTokens = torch.einsum('sbe,hew->bhsw', x, self.w0) + + self.b0.view(1, self.b0.size(0), 1, -1)
         filteredRepOfTokens = torch.nn.functional.relu(hiddenReprOfTokens)
-        
-        # print(f'  fRep shape: {filteredRepOfTokens.shape}')
-        # print(f'  w1 shape: {self.w1.shape}') 
-        # print(f'  b1 shape: {self.b1.shape}')
-        
-        templateReprWeights = torch.einsum('wnh,bhsw->bhsn', self.w1, filteredRepOfTokens) + self.b1
-        # template_weights = self.softmax(template_weights_unbound)
-        
-        # print(f'  templateRep shape: {templateReprWeights.shape}')
-
-        # print(f'type self.templates: {self.templates.type()}')
-        # print(f'type reprWeights: {templateReprWeights.type()}')
-
+        templateReprWeights = torch.einsum('wnh,bhsw->bhsn', self.w1, filteredRepOfTokens) + self.b1.view(1, self.b1.size(0), 1, -1)
         attnWeights = torch.einsum('bhsn,nt->bhst', templateReprWeights, self.templates.half()) # Just a multiplication, no parameters to learn
 
         # n x t, 1D templates <- try this for now, get baseline, if trouble
         # n x s x t (s==t), 2D templates <- big bird style
-        # There is a connection between these. Could still build sxs matrices, perhaps 
         # Could index a given row for each token; concat that vector with other templates as we are doing
-
         # Add a given token's window row on top of the nt templates. 
-
         # Could implement in a batched way! Change self.templates and 200 nt to snt, 192 use different weights to different tasks
 
-        # # Get Attention
-        # attn_weights = (template_weights[0] * self.templates[0] + 
-        #                 template_weights[1] * self.templates[1] +
-        #                 template_weights[2] * self.templates[2])
-
-        # print(f'  attnWeights shape: {attnWeights.shape}')
-
         return attnWeights.contiguous().view((-1, self.seq_len, self.in_dims))
-         #attn_weights
 
         # Calculate the value using attention and x
         # value = torch.einsum('sbd,hde->bhse', x, self.value_w) + self.value_b
