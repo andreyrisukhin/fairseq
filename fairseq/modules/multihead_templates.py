@@ -105,23 +105,12 @@ class TemplatesManualMH(nn.Module):
 
         def template_window(s:int, w:int=3):
             assert w <= s, f'Cannot have more inputs than allowed dimension'
-            # From ABC repo for efficiency reasons
-            prior_window_attn_weights = torch.zeros((s,s), device=torch.device(DEVICE))
+            prior_window_attn_weights = torch.zeros((s,s))#, device=torch.device(DEVICE))
             for i in range(s):
-                # TODO answer Q about padding, cold starting
-                start_idx = max(0, i-w)
-                prior_window_attn_weights[i, start_idx:i+1] = 1. / w 
-                # TODO check this is what we want, in work.py file (off by 0x01)
+                # TODO padding, cold starting?
+                start_idx = max(0, i-w+1)
+                prior_window_attn_weights[i, start_idx:i+1] = 1. / (i+1 - start_idx)
             return prior_window_attn_weights
-
-            # Old code, broke causality guarantee
-            # radius = w//2
-            # for i in range(s):
-            #     start_idx = max(0, i - radius)
-            #     end_idx = min(s-1, i + radius)    
-            #     length = end_idx - start_idx + 1
-            #     prior_window_attn_weights[i, start_idx: end_idx + 1] = 1. / length
-            # return prior_window_attn_weights
 
         t1 = v2_random(s=sentence_length) # Likely want to repeat this for s times, as in big bird
         t2 = v2_first(s=sentence_length)
@@ -139,9 +128,9 @@ class TemplatesManualMH(nn.Module):
 
         ''' Weights and Biases for Multilayer Perceptron (linear -> relu/other activation) '''
         self.w0 = Parameter(xavier_uniform_(empty(heads, in_dims, HIDDEN_DIM,)))  # Linear 1 weights 
-        self.b0 = Parameter(constant_(empty(heads, HIDDEN_DIM,), 0.0))  # Linear 1 bias
+        self.b0 = Parameter(torch.zeros(heads, HIDDEN_DIM)) #(constant_(empty(heads, HIDDEN_DIM,), 0.0))  # Linear 1 bias
         self.w1 = Parameter(xavier_uniform_(empty(HIDDEN_DIM, num_templates, heads,))) # Lin 2 weights 
-        self.b1 = Parameter(constant_(empty(heads, num_templates,), 0.0))  # Linear 2 bias; first dim instead of last, due to order of multiplication
+        self.b1 = Parameter(torch.zeros(heads, num_templates))  #(constant_(empty(heads, num_templates,), 0.0))  # Linear 2 bias; first dim instead of last, due to order of multiplication
 
         self.softmax = nn.Softmax(dim=-1)
 
@@ -191,7 +180,7 @@ class TemplatesManualMH(nn.Module):
         Softmax is no longer required, because enforced with softmax on rows and on weights. TODO prove
         '''      
                 
-        hiddenReprOfTokens = torch.einsum('sbe,hew->bhsw', x, self.w0) + + self.b0.view(1, self.b0.size(0), 1, -1)
+        hiddenReprOfTokens = torch.einsum('sbe,hew->bhsw', x, self.w0) + self.b0.view(1, self.b0.size(0), 1, -1)
         filteredRepOfTokens = torch.nn.functional.relu(hiddenReprOfTokens)
         templateReprWeights = torch.einsum('wnh,bhsw->bhsn', self.w1, filteredRepOfTokens) + self.b1.view(1, self.b1.size(0), 1, -1)
         attnWeights = torch.einsum('bhsn,nt->bhst', templateReprWeights, self.templates.half()) # Just a multiplication, no parameters to learn
