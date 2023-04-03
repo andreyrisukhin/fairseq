@@ -9,8 +9,8 @@ import numpy as np
 
 class TemplatesManualMH(nn.Module):
     def __init__(self, in_dims, sentence_length, heads:int=1):             
-        ''' MLP to learn the weights of templates for different input tokens. '''
-        '''
+        ''' MLP to learn the weights of templates for different input tokens. 
+        
         Einsum indicies and what they represent
             b = batch size
             e = in_dims, embed dimension
@@ -24,10 +24,19 @@ class TemplatesManualMH(nn.Module):
             (1) bse, hew -> bhsw  Into hidden repr
             (2) wnh,bhsw->bhsn Into template weights
             (3) bhsn, nt -> bhst   Into attention weights
+
+        Layers
+            (1) Linear layer with w0 coefficients, b0 intercept. Into hidden reprsentation
+                    Then apply ReLU
+            (2) Linear layer with w1 coefficients, b1 intercept. Into template weights
+            (3) Output attention weights, a multiplication of (constant) templates with template weights.
+
+            # TODO check softmaxes are where they need to be
+
         '''
         super(TemplatesManualMH, self).__init__() # ASK why not super().__init()__
         SEED = 409
-        rng = np.random.default_rng(SEED)
+        # rng = np.random.default_rng(SEED)
         # torch.manual_seed(SEED)
         # torch.cuda.manual_seed(SEED)
         # torch.backends.cudnn.deterministic = True
@@ -105,7 +114,7 @@ class TemplatesManualMH(nn.Module):
 
         def template_window(s:int, w:int=3):
             assert w <= s, f'Cannot have more inputs than allowed dimension'
-            prior_window_attn_weights = torch.zeros((s,s))#, device=torch.device(DEVICE))
+            prior_window_attn_weights = torch.zeros((s,s), device=torch.device(DEVICE))
             for i in range(s):
                 # TODO padding, cold starting?
                 start_idx = max(0, i-w+1)
@@ -155,35 +164,36 @@ class TemplatesManualMH(nn.Module):
         print(f'  sentence_len: {sentence_length}') # 512  # 2048 (b/c --max-tokens) did not pass the assertion # TODO ASK HAO, unless 2048 is max input and we project down to output 512? Feels unlikely, no longer seq2seq of same length, but ask
         print(f'  hidden_dim: {HIDDEN_DIM}') # in_dims
 
-    def forward(self, x): 
-        '''
-        Input the word feature vector
-        Output the weights vector
-        Softmax it to get linear combination (# TODO in templates_multihead_attention.py?)
-            Softmax := probability distribution over attn templates
-                if weights with sum to 1, output sum to 1
-                Saves us having to do softmax after summing over the templates
-        '''     
-        '''
-        The MLP is a function: output is [num_templates, ] vector weighing the fixed templates
-        MLP input is [bsz, seqlen, embed_dim] 
-        (all heads take the same input; different MLP for each head, init random, but take same input)
-        MLP should work with any seq len, batch size
-        '''  
-            
+    def forward(self, x):               
         '''
         Parameters:
-            x: Tensor (sequence length, batch size, dimension of token representation)
+            x: Tensor (sequence length, batch size, dimension of token representation), the token feature vector.
             Fairseq's x [time, batch, channel] is [seq len, batch size, embed dim]. x looks like sbd
         Return attention, value.
         Assume that MHA.py will reuse masking machinery for template attention. Using templates_multihead_attention.py with minimal modification.
         Softmax is no longer required, because enforced with softmax on rows and on weights. TODO prove
+
+        The MLP is a function: output is [num_templates, ] vector weighing the fixed templates
+        MLP input is [bsz, seqlen, embed_dim] 
+        (all heads take the same input; different MLP for each head, init random, but take same input)
+        MLP should work with any seq len, batch size
+        
+        # TODO
+        Softmax the template weights vector to get linear combination (# TODO in templates_multihead_attention.py?)
+            Softmax := probability distribution over attn templates
+                if weights with sum to 1, output sum to 1
+                Saves us having to do softmax after summing over the templates
         '''      
                 
-        hiddenReprOfTokens = torch.einsum('sbe,hew->bhsw', x, self.w0) + self.b0.view(1, self.b0.size(0), 1, -1)
+        hiddenReprOfTokens = torch.einsum('sbe,hew->bhsw', x, self.w0
+                                          ) + self.b0.view(1, self.b0.size(0), 1, -1)
         filteredRepOfTokens = torch.nn.functional.relu(hiddenReprOfTokens)
-        templateReprWeights = torch.einsum('wnh,bhsw->bhsn', self.w1, filteredRepOfTokens) + self.b1.view(1, self.b1.size(0), 1, -1)
-        attnWeights = torch.einsum('bhsn,nt->bhst', templateReprWeights, self.templates.half()) # Just a multiplication, no parameters to learn
+        templateReprWeights = torch.einsum('wnh,bhsw->bhsn', self.w1, filteredRepOfTokens
+                                           ) + self.b1.view(1, self.b1.size(0), 1, -1)
+        attnWeights = torch.einsum('bhsn,nt->bhst', templateReprWeights, 
+                                   self.templates.type_as(templateReprWeights) # TODO 1) test, 2) move out of this multiplication for speedup
+                                #    self.templates.half()
+                                   ) # Just a multiplication, no parameters to learn
 
         # n x t, 1D templates <- try this for now, get baseline, if trouble
         # n x s x t (s==t), 2D templates <- big bird style
@@ -195,7 +205,5 @@ class TemplatesManualMH(nn.Module):
 
         # Calculate the value using attention and x
         # value = torch.einsum('sbd,hde->bhse', x, self.value_w) + self.value_b
-
-        # TODO modify below
         # return energy.contiguous().view((-1, self.seq_len, self.in_dims)), value.contiguous().view((-1, self.seq_len, self.head_dim))
 
