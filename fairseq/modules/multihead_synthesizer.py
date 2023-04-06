@@ -83,8 +83,7 @@ class SynthesizerDenseEinsumMH(nn.Module):
         
         # Linear projection 2
         energy = torch.einsum("bhsw,hwu->bhsu", filteredRepOfTokens, self.w1) + self.b1
-        # print(f'  energy shape: {energy.shape}')
-        
+        # print(f'  energy shape: {energy.shape}')       
         return energy
 
     def forward(self, x): 

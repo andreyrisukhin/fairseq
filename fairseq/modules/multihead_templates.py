@@ -57,7 +57,7 @@ class TemplatesManualMH(nn.Module):
         #     assert r <= n, f'Cannot have more inputs than allowed dimension'
         #     t = np.zeros((n, n))
         #     for row in t:
-        #         idxs = rng.choice(n, size=2)
+        #         idxs = rng.choice(n, size=2) # TODO make this causal, limit selected IDs to < diagonal. THINK how forcing selecting n changes distribution with this condition.
         #         for i in idxs:
         #             row[i] = 1
         #     return torch.tensor(t)
@@ -93,10 +93,10 @@ class TemplatesManualMH(nn.Module):
         NO idea what they should be constructed as. Try (1) random, (2) front few, (3) back few.
         '''
         DEVICE = 'cuda'
-        def v2_random(s:int):
-            torch.manual_seed(SEED)
-            t = torch.rand((s,), device=torch.device(DEVICE)).softmax(0)
-            return t
+        # def v2_random(s:int): # Breaks causality
+        #     torch.manual_seed(SEED)
+        #     t = torch.rand((s,), device=torch.device(DEVICE)).softmax(0)
+        #     return t
         FRONT = 3
         BACK = 3
         def v2_first(s:int):
@@ -105,32 +105,39 @@ class TemplatesManualMH(nn.Module):
             t[FRONT:] = 0 # Zero out latter
             t = torch.softmax(t,0)
             return t
-        def v2_last(s:int):
-            torch.manual_seed(SEED)
-            t = torch.rand((s,), device=torch.device(DEVICE))
-            t[:BACK] = 0 # Zero-out former
-            t = torch.softmax(t,0)
-            return t
+        # def v2_last(s:int): # Breaks causality
+        #     torch.manual_seed(SEED)
+        #     t = torch.rand((s,), device=torch.device(DEVICE))
+        #     t[:BACK] = 0 # Zero-out former
+        #     t = torch.softmax(t,0)
+        #     return t
 
         def template_window(s:int, w:int=3):
             assert w <= s, f'Cannot have more inputs than allowed dimension'
             prior_window_attn_weights = torch.zeros((s,s), device=torch.device(DEVICE))
             for i in range(s):
                 # TODO padding, cold starting?
-                start_idx = max(0, i-w+1)
+                start_idx = max(0, (i-w)+1)
                 prior_window_attn_weights[i, start_idx:i+1] = 1. / (i+1 - start_idx)
             return prior_window_attn_weights
 
-        t1 = v2_random(s=sentence_length) # Likely want to repeat this for s times, as in big bird
+        # t1 = v2_random(s=sentence_length) # Likely want to repeat this for s times, as in big bird
         t2 = v2_first(s=sentence_length)
-        t3 = v2_last(s=sentence_length)
-        self.templates = torch.stack((t1,t2,t3))#.float() #.type("Float") # [t1, t2, t3] # List of tensors 
+        # t3 = v2_last(s=sentence_length)
+        # self.templates = torch.stack((t1,t2,t3))#.float() #.type("Float") # [t1, t2, t3] # List of tensors 
         t4 = template_window(s=sentence_length, w=3)
-        self.templates = torch.cat((self.templates, t4), dim=0)
+        self.templates = torch.cat((t4, torch.broadcast_to(t2, (len(t2), len(t2)))), dim=0)
+
+        # Temporary: Later, index which segments of self.templates to keep, instead of recreating
+        # self.t1 = t1
+        self.t2 = t2
+        # self.t3 = t3
+        self.t4 = t4
 
         head_dim = in_dims // heads 
         assert (head_dim * heads == in_dims), "embed in_dims must be divisible by number of heads"
         num_templates = len(self.templates)
+        print(f'num_templates={num_templates}')
         HIDDEN_DIM = in_dims
         self.in_dims = in_dims
         self.seq_len = sentence_length
@@ -144,14 +151,16 @@ class TemplatesManualMH(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
 
         """ March 29 2023 notes
-        Templates 1) sliding window depends on pos, 2) others do not <-- these may not be sensible
+        Templates 1) sliding window depends on pos, 2) others do not [<-- these may not be sensible?]
         > Keep them seperate
         > 1) does not need to be indexed
-        > 2) indexing. Look at batched ways to index in pytorch. High level: pass indices to tensor as another tensor, use indexing tensor
+        > 2) indexing. Look at batched ways to index in pytorch. 
+            High level: pass indices to tensor as another tensor, use indexing tensor
             - Easy to make mistakes
             - "Indexing a tensor using tensor/list in PyTorch"
 
         Once get sliding window for each location, concat with first 3 templates, then do einsum
+            > Check this piece, what does location mean here? We want to get the column for each token?
 
         Template weighting may need a softmax on the weighting; put softmax on the weighting
 
@@ -190,10 +199,40 @@ class TemplatesManualMH(nn.Module):
         filteredRepOfTokens = torch.nn.functional.relu(hiddenReprOfTokens)
         templateReprWeights = torch.einsum('wnh,bhsw->bhsn', self.w1, filteredRepOfTokens
                                            ) + self.b1.view(1, self.b1.size(0), 1, -1)
-        attnWeights = torch.einsum('bhsn,nt->bhst', templateReprWeights, 
-                                   self.templates.type_as(templateReprWeights) # TODO 1) test, 2) move out of this multiplication for speedup
-                                #    self.templates.half()
-                                   ) # Just a multiplication, no parameters to learn
+        
+        # for 1 head, 1 bsz, the template weights are (s,n). 
+            # For third token, MLP(3) -> [z1^[3], z2^[3], ... (if more templates)]
+            # Each column is the weights for each token of a template
+            # If two templates, sliding window (s,s) and first token (s,1), the third token's template is: z1^[3] * Sw[3] + z2^[3] * ft
+            # Extending to all tokens, multiply all of z1 @ Sw + z2 @ ft, broadcast ft
+        # Impose softmax constraints: (1) sum(s column) == 1, (2) each s column item > 0
+        # Then normalize at end after template multiplication
+
+        # Try both the seperate and sum, or concat templates and multiply by z output (likely easier, just make sure I document)
+
+        # First attempt, seperate and sum
+
+
+
+
+
+
+
+
+
+
+        # New plan: seperate the constant templates (1 row) and templates that depend on token position (sliding window)
+        # Stack the templates each time with indexing
+
+        # For now, assume we stack each row for corresponding token TODO validate, window is causal = not symmetric
+            # If need multiple rows, use torch.index(); use for self.templates.index([0,1,2,i])
+
+        t4_current = self.t4[0] # TODO how to change this i, loop is too slow
+        new_templates = torch.stack((self.t1, self.t2, self.t3, t4_current))
+
+        # TODO old below, 
+        attnWeights = torch.einsum('bhsn,nt->bhst', templateReprWeights, self.templates.type_as(
+                templateReprWeights)) # type depends on x type; no parameters to learn
 
         # n x t, 1D templates <- try this for now, get baseline, if trouble
         # n x s x t (s==t), 2D templates <- big bird style
