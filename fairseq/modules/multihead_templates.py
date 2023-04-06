@@ -128,11 +128,11 @@ class TemplatesManualMH(nn.Module):
         t4 = template_window(s=sentence_length, w=3)
         self.templates = torch.cat((t4, torch.broadcast_to(t2, (len(t2), len(t2)))), dim=0)
 
-        # Temporary: Later, index which segments of self.templates to keep, instead of recreating
-        # self.t1 = t1
-        self.t2 = t2
-        # self.t3 = t3
-        self.t4 = t4
+        # # Temporary: Later, index which segments of self.templates to keep, instead of recreating
+        # # self.t1 = t1
+        # self.t2 = t2
+        # # self.t3 = t3
+        # self.t4 = t4
 
         head_dim = in_dims // heads 
         assert (head_dim * heads == in_dims), "embed in_dims must be divisible by number of heads"
@@ -212,9 +212,9 @@ class TemplatesManualMH(nn.Module):
 
         # First attempt, seperate and sum
 
+        attnWeights = templateReprWeights @ self.templates
 
-
-
+        # TODO test
 
 
 
@@ -227,12 +227,12 @@ class TemplatesManualMH(nn.Module):
         # For now, assume we stack each row for corresponding token TODO validate, window is causal = not symmetric
             # If need multiple rows, use torch.index(); use for self.templates.index([0,1,2,i])
 
-        t4_current = self.t4[0] # TODO how to change this i, loop is too slow
-        new_templates = torch.stack((self.t1, self.t2, self.t3, t4_current))
+        # t4_current = self.t4[0] # TODO how to change this i, loop is too slow
+        # new_templates = torch.stack((self.t1, self.t2, self.t3, t4_current))
 
         # TODO old below, 
-        attnWeights = torch.einsum('bhsn,nt->bhst', templateReprWeights, self.templates.type_as(
-                templateReprWeights)) # type depends on x type; no parameters to learn
+        # attnWeights = torch.einsum('bhsn,nt->bhst', templateReprWeights, self.templates.type_as(
+        #         templateReprWeights)) # type depends on x type; no parameters to learn
 
         # n x t, 1D templates <- try this for now, get baseline, if trouble
         # n x s x t (s==t), 2D templates <- big bird style
