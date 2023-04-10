@@ -137,7 +137,7 @@ class TemplatesManualMH(nn.Module):
         head_dim = in_dims // heads 
         assert (head_dim * heads == in_dims), "embed in_dims must be divisible by number of heads"
         num_templates = len(self.templates)
-        print(f'num_templates={num_templates}')
+        print(f'num_templates={num_templates}, true 2d templates represented={num_templates / sentence_length}')
         HIDDEN_DIM = in_dims
         self.in_dims = in_dims
         self.seq_len = sentence_length
@@ -212,7 +212,16 @@ class TemplatesManualMH(nn.Module):
 
         # First attempt, seperate and sum
 
-        attnWeights = templateReprWeights @ self.templates
+        print(f'type templateReprWeights = {templateReprWeights.type()}') # HalfTensor
+        print(f'type self.templates = {self.templates.type()}') # FloatTensor
+
+        print(f'shape templateReprWeights = {templateReprWeights.shape}') # [2, 8, 512, 1024] : bhsn 
+        print(f'shape self.templates = {self.templates.shape}') # [1024, 512] : 
+
+
+        # attnWeights = templateReprWeights @ self.templates # Expected Half but found Float
+        attnWeights = torch.einsum('bhsn,nt->bhst', templateReprWeights, self.templates.type_as(
+                templateReprWeights)) # type depends on x type; no parameters to learn
 
         # TODO test
 
