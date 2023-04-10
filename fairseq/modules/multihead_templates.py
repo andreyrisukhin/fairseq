@@ -208,22 +208,10 @@ class TemplatesManualMH(nn.Module):
         # Impose softmax constraints: (1) sum(s column) == 1, (2) each s column item > 0
         # Then normalize at end after template multiplication
 
-        # Try both the seperate and sum, or concat templates and multiply by z output (likely easier, just make sure I document)
-
-        # First attempt, seperate and sum
-
-        print(f'type templateReprWeights = {templateReprWeights.type()}') # HalfTensor
-        print(f'type self.templates = {self.templates.type()}') # FloatTensor
-
-        print(f'shape templateReprWeights = {templateReprWeights.shape}') # [2, 8, 512, 1024] : bhsn 
-        print(f'shape self.templates = {self.templates.shape}') # [1024, 512] : 
-
-
-        # attnWeights = templateReprWeights @ self.templates # Expected Half but found Float
+        # Concat templates and multiply by z output (likely easier, just make sure I document)
         attnWeights = torch.einsum('bhsn,nt->bhst', templateReprWeights, self.templates.type_as(
                 templateReprWeights)) # type depends on x type; no parameters to learn
 
-        # TODO test
 
 
 
