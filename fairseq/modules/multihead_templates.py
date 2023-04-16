@@ -36,7 +36,7 @@ class TemplatesManualMH(nn.Module):
         '''
         super(TemplatesManualMH, self).__init__() # ASK why not super().__init()__
         SEED = 409
-        # rng = np.random.default_rng(SEED)
+        rng = np.random.default_rng(SEED)
         # torch.manual_seed(SEED)
         # torch.cuda.manual_seed(SEED)
         # torch.backends.cudnn.deterministic = True
@@ -52,25 +52,33 @@ class TemplatesManualMH(nn.Module):
         > Global attention, g=2 (Rotated L to cover left and top sides)
         '''
         
-        # ''' Takes length, returns torch square zero matrix with 2 elements in each row set to 1.'''
-        # def template_random(n:int, r:int=2) -> torch.tensor:
-        #     assert r <= n, f'Cannot have more inputs than allowed dimension'
-        #     t = np.zeros((n, n))
-        #     for row in t:
-        #         idxs = rng.choice(n, size=2) # TODO make this causal, limit selected IDs to < diagonal. THINK how forcing selecting n changes distribution with this condition.
-        #         for i in idxs:
-        #             row[i] = 1
-        #     return torch.tensor(t)
+        ''' Takes length, returns torch square zero matrix with 2 elements in each row set to 1.'''
+        def template_random(n:int, r:int=2) -> torch.tensor:
+            assert r <= n, f'Cannot have more inputs than allowed dimension'
+            t = np.zeros((n, n))
+            for i, row in enumerate(t):
+                idxs = rng.choice(n, size=r) # made this causal below. THINK how forcing selecting n changes distribution with this condition.
+                idxs = [num for num in idxs if num <= i] # Causal mask imposed, only keep those idxs less than or on diagonal to avoid lookahead. We keep original distribution and mask it. This <= diag condition allows self attention, which is still causual.
+                # print(f'DB row {i} idx {idxs}')
+                count_valid = len(idxs)
+                for idx in idxs:
+                    row[idx] = 1 / count_valid # Normalize
+            return torch.tensor(t, device=torch.device(DEVICE))
 
-        # ''' Takes dim, returns a square torch matrix with top/left g rows/columns assigned to 1. '''
-        # def template_global(n:int, g:int=2): # TODO violates causality
-        #     assert g <= n, f'Cannot have more inputs than allowed dimension'
-        #     t = np.zeros((n, n))
-        #     global_line = np.ones((n,))
-        #     for i in range(g):
-        #         t[i] = global_line.copy() # Horizontal line of 1s
-        #         t.T[i] = global_line.copy() # Vertical line of 1s
-        #     return torch.tensor(t)
+        ''' Takes dim, returns a square torch matrix with top/left g rows/columns assigned to 1. '''
+        def template_global(n:int, g:int=2): # TODO violates causality
+            assert g <= n, f'Cannot have more inputs than allowed dimension'
+            t = np.zeros((n, n))
+            global_line = np.ones((n,))
+            for i in range(g):
+                t[i] = global_line.copy() # Horizontal line of 1s
+                t.T[i] = global_line.copy() # Vertical line of 1s
+
+            # Causal mask for diagonal (slow, could be improved)
+            for i, row in enumerate(t):
+                row[i+1:] = 0
+                row /= sum(row) # Normalize rows
+            return torch.tensor(t, device=torch.device(DEVICE))
 
         DEVICE = 'cuda'
         # FRONT = 3
@@ -92,11 +100,31 @@ class TemplatesManualMH(nn.Module):
 
         # t2 = v2_first(s=sentence_length)
         t4 = template_window(s=sentence_length, w=3)
+        t5 = template_window(s=sentence_length, w=50)
+
+        t_r1 = template_random(sentence_length, r=1)
+        t_r2 = template_random(sentence_length, r=2)
+        t_r50 = template_random(sentence_length, r=50)
+
+        t_g1 = template_global(sentence_length, g=1)
+        t_g3 = template_global(sentence_length, g=3)
+
+        t_w3 = template_window(sentence_length, w=3)
+        t_w50 = template_window(sentence_length, w=50)
 
         # t5 = templ
 
+        # print(f't_r50 {t_r50}')
+        # print(f't_g3 {t_g3}')
+
         # self.templates = torch.cat((t4, torch.broadcast_to(t2, (len(t2), len(t2)))), dim=0)
-        self.templates = t4
+        # self.templates = t4
+        # self.templates = torch.cat((t4, t5), dim=0)
+        self.templates = torch.cat((
+            t_r1, t_r2, t_r50,
+            t_g1, t_g3,
+            t_w3, t_w50
+        ), dim=0)
 
         head_dim = in_dims // heads 
         assert (head_dim * heads == in_dims), "embed in_dims must be divisible by number of heads"
