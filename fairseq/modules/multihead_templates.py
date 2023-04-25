@@ -108,6 +108,7 @@ class TemplatesManualMH(nn.Module):
 
         t_g1 = template_global(sentence_length, g=1)
         t_g3 = template_global(sentence_length, g=3)
+        t_g50 = template_global(sentence_length, g=50)
 
         t_w3 = template_window(sentence_length, w=3)
         t_w50 = template_window(sentence_length, w=50)
@@ -122,7 +123,7 @@ class TemplatesManualMH(nn.Module):
         # self.templates = torch.cat((t4, t5), dim=0)
         self.templates = torch.cat((
             t_r1, t_r2, t_r50,
-            t_g1, t_g3,
+            t_g1, t_g3, t_g50,
             t_w3, t_w50
         ), dim=0)
 
