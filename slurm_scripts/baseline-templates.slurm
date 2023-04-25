@@ -73,13 +73,17 @@ else
     exit 0
 fi
 
-MAX_TOKENS=$(python -c "print(${FRAGS_PER_GPU}*1024)")
+# MAX_TOKENS=$(python -c "print(${FRAGS_PER_GPU}*1024)")
+# MAX_TOKENS=1024 # TODO ask Hao, what is the effect of me hardcoding this way? What are downsides, -> what are other ways to fix bsz and tokens_per_sample correctly?
 UPDATE_FREQ=$(python -c "print(int(32//${FRAGS_PER_GPU}//${NUM_GPUS}))")
 # UPDATE_FREQ=$(python -c "print(int(32//${FRAGS_PER_GPU}//${NUM_GPUS}))"/2)
 
 BSZ=16
-TOKENS_PER_SAMPLE=$(python -c "print(int(${UPDATE_FREQ}*${MAX_TOKENS}*${NUM_GPUS}//${BSZ}))")
-TOKENS_PER_SAMPLE=$(python -c "print(min(${TOKENS_PER_SAMPLE}, 512))") # TODO might not be the preferred way to correct
+TOKENS_PER_SAMPLE=512 # Constant to be comparable?
+MAX_TOKENS=$(python -c "print(int(${TOKENS_PER_SAMPLE}/${UPDATE_FREQ}/${NUM_GPUS}*${BSZ}))") # This adjust max tokens based on num GPUs to keep BSZ and tokens per sample constant. TODO there's a case where max tokens is calculated as less than 1, not int; would need to adjust update_freq in this case.
+
+# TOKENS_PER_SAMPLE=$(python -c "print(int(${UPDATE_FREQ}*${MAX_TOKENS}*${NUM_GPUS}//${BSZ}))")
+# TOKENS_PER_SAMPLE=$(python -c "print(min(${TOKENS_PER_SAMPLE}, 512))") # TODO might not be the preferred way to correct
 
 # TOKENS_PER_SAMPLE is upper bounded by GPU size, can always use something smaller 
 # For example, if we can use fewer gpus with a large tokens_per_sample, we can run more experiments than using more gpus with a small tokens_per_sample
