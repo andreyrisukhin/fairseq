@@ -5,17 +5,17 @@
 #SBATCH --nodes=1
 #SBATCH --account=ark
 #SBATCH --partition=gpu-2080ti
-#SBATCH --gpus=4 ## Make sure to change gpu count here and in below constant!
+#SBATCH --gpus=1 ## Make sure to change gpu count here and in below constant!
 #SBATCH --cpus-per-gpu=4
 ## Number of cores per node
 #SBATCH --ntasks-per-node=1
 ## Walltime (3 hours). Do not specify a walltime substantially more than your job needs.
-#SBATCH --time=5:00:00
+#SBATCH --time=00:07:00
 ## Memory per node. It is important to specify the memory since the default memory is very small.
 ## For mox, --mem may be more than 100G depending on the memory of your nodes.
 ## For ikt, --mem may be 58G or more depending on the memory of your nodes.
 ## See above section on "Specifying memory" for choices for --mem.
-#SBATCH --mem=32G ##64G ##32G This is CPU mem, for GPU mem decrease max tokens
+#SBATCH --mem=32G
 ## Specify the working directory for this job
 #SBATCH --chdir=/gscratch/ark/risuka/wikitext/slurm_output
 ##turn on e-mail notification
@@ -40,11 +40,11 @@
 
 # TOKENS_PER_SAMPLE=512 # Important to keep constant for all arch train and inference, allows models to be comparable! 
 
-# NUM_GPUS=1
-# DEVICE=0
-NUM_GPUS=4
-DEVICE=0,1,2,3 ##,2,3
-DATA=wikitext-103-full #-full ##-ten-percent # IMPORTANT to change!
+NUM_GPUS=1
+DEVICE=0
+# NUM_GPUS=2
+# DEVICE=0,1
+DATA=wikitext-103-ten-percent
 
 export XDG_CACHE_HOME="/gscratch/ark/risuka/.cache"
 export CUDA_VISIBLE_DEVICES=$DEVICE
@@ -62,8 +62,8 @@ else
 fi
 
 if [[ ${DATA} == "wikitext-103-full" ]]; then
-    MAX_UPDATE=300000 ## TODO tune these # This is less important than LR; training stops after MAX_UPDATE, this is an end threshold
-    WARMUP_UPDATES=6000 # Generally, Andrey should understand what params do first; not worth when more important
+    MAX_UPDATE=300000 ## TODO tune these
+    WARMUP_UPDATES=6000
 elif [[ ${DATA} == "wikitext-103-ten-percent" ]]; then
     MAX_UPDATE=50000
     WARMUP_UPDATES=4000
@@ -72,28 +72,31 @@ else
     exit 0
 fi
 
-# "Pytorch lightning, huggingface, etc, take away thinking about LR; for research we want to control"
+# MAX_TOKENS=$(python -c "print(${FRAGS_PER_GPU}*1024)")
+# MAX_TOKENS=1024 # TODO ask Hao, what is the effect of me hardcoding this way? What are downsides, -> what are other ways to fix bsz and tokens_per_sample correctly?
+UPDATE_FREQ=$(python -c "print(int(32//${FRAGS_PER_GPU}//${NUM_GPUS}))")
+# UPDATE_FREQ=$(python -c "print(int(32//${FRAGS_PER_GPU}//${NUM_GPUS}))"/2)
 
-UPDATE_FREQ=$(python -c "print(int(32//${FRAGS_PER_GPU}//${NUM_GPUS}*2))")
-BSZ=16 #32 #16
-TOKENS_PER_SAMPLE=128 #256 #512 # Constant to be comparable?
-MAX_TOKENS=$(python -c "print(int(${TOKENS_PER_SAMPLE}/${UPDATE_FREQ}/${NUM_GPUS}*${BSZ}/2))") # This adjust max tokens based on num GPUs to keep BSZ and tokens per sample constant. TODO there's a case where max tokens is calculated as less than 1, not int; would need to adjust update_freq in this case.
-## Decreased MAX TOKENS by 2, thus increased update freq by two
-# Now just doing anything for it to fit into memory
+BSZ=16
+TOKENS_PER_SAMPLE=512 # Constant to be comparable?
+MAX_TOKENS=$(python -c "print(int(${TOKENS_PER_SAMPLE}/${UPDATE_FREQ}/${NUM_GPUS}*${BSZ}))") # This adjust max tokens based on num GPUs to keep BSZ and tokens per sample constant. TODO there's a case where max tokens is calculated as less than 1, not int; would need to adjust update_freq in this case.
 
-## We increase max tokens for a gpu until OOm error, to maximize fit onto GPU, and then adjust update frequency accordingly
+## Testing failure case when MAX_TOKENS = TOKENS_PER_SAMPLE
+# MAX_TOKENS=512
 
+## Testing failure case when MAX_TOKENS is not cleanly divisible by TOKENS_PER_SAMPLE
+MAX_TOKENS=$(python -c "print(int(${MAX_TOKENS}) + 1)")
 
+# TOKENS_PER_SAMPLE=$(python -c "print(int(${UPDATE_FREQ}*${MAX_TOKENS}*${NUM_GPUS}//${BSZ}))")
+# TOKENS_PER_SAMPLE=$(python -c "print(min(${TOKENS_PER_SAMPLE}, 512))") # TODO might not be the preferred way to correct
+
+# TOKENS_PER_SAMPLE is upper bounded by GPU size, can always use something smaller 
+# For example, if we can use fewer gpus with a large tokens_per_sample, we can run more experiments than using more gpus with a small tokens_per_sample
 
 SEED=42
-LR=0.0005 #1e-07 ##7e-4 ## THIS SEEMS SMALL, ANDREY NEEDS TO TUNE
+LR=0.0005 #1e-07 ##7e-4
 DROPOUT=0.1 ##0.3
-WEIGHT_DECAY=0.01 #0 # Less significant, not worthwhile at this stage
-
-# A few hyperparameters are important to tune, LR needs to be tuned; do close to baseline, if baseline is 0.01 use close to this
-# Distibguish "warm up". Empirical: start with small LR, and go to regular LR gradually, this is learn rate schedule
-# LR scales gradient
-# Andrey, this could be the bug
+WEIGHT_DECAY=0.01 #0
 
 echo "${DATA} Templates Baseline"
 echo "$SBATCH_ACCOUNT $SBATCH_PARTITION"
@@ -103,7 +106,7 @@ echo "seed=$SEED"
 echo "BSZ=$BSZ TOKENS_PER_SAMPLE=$TOKENS_PER_SAMPLE NUM_GPUS=$NUM_GPUS MAX_TOKENS=$MAX_TOKENS UPDATE_FREQ=$UPDATE_FREQ"
 
 DATA_PATH=/gscratch/ark/risuka/wikitext/data-bin/${DATA}
-RUN_NAME=baseline-templates-20-softmaxed #currentcode #10%-templates-debug-apr3 ## Remember to update name! 
+RUN_NAME=check_softmaxed_coefficients ## Need to update this each time GPU setting changes, else remembers old setting
 SAVE_DIR=/gscratch/ark/risuka/wikitext/checkpoints/${RUN_NAME}
 TBLOG_DIR=/gscratch/ark/risuka/wikitext/tblogs/${RUN_NAME}
 
@@ -140,3 +143,43 @@ fi
     --find-unused-parameters \
     --max-epoch 300 \
     --tensorboard-logdir ${TBLOG_DIR}
+
+# --tokens-per-sample ${TOKENS_PER_SAMPLE} \
+# --batch-size ${BSZ} \
+
+# /mmfs1/gscratch/ark/hao/conda/envs/prior/bin/python \
+# /gscratch/ark/hao/abc/fairseq_cli/train.py \
+#     ${DATA_PATH} \
+#     --arch transformer_wmt_en_de \
+#     --update-freq ${UPDATE_FREQ} \
+#     --save-dir ${SAVE_DIR} \
+#     --no-epoch-checkpoints \
+#     --no-last-checkpoints \
+#     --keep-best-checkpoints 5 \
+#     --activation-fn "gelu" \
+#     --share-all-embeddings \
+#     --optimizer adam \
+#     --seed 42 \
+#     --adam-betas '(0.9, 0.98)' \
+#     --lr-scheduler inverse_sqrt \
+#     --criterion label_smoothed_cross_entropy \
+#     --label-smoothing 0.1 \
+#     --warmup-init-lr 1e-07 \
+#     --max-tokens ${MAX_TOKENS} \
+#     --lr ${LR} \
+#     --weight-decay ${WEIGHT_DECAY} \
+#     --dropout ${DROPOUT} \
+#     --max-update ${MAX_UPDATE} \
+#     --warmup-updates ${WARMUP_UPDATES} \
+#     --clip-norm 0. \
+#     --fp16 \
+#     --fp16-init-scale 16 \
+#     --fp16-scale-window 1024 \
+#     --ddp-backend=no_c10d \
+#     --find-unused-parameters \
+#     --eval-bleu \
+#     --eval-bleu-args '{"beam": 1, "max_len_a": 1.2, "max_len_b": 10}' \
+#     --eval-bleu-detok moses \
+#     --eval-bleu-remove-bpe \
+#     --best-checkpoint-metric bleu \
+#     --maximize-best-checkpoint-metric

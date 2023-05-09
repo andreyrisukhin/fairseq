@@ -353,7 +353,7 @@ class TemplatesDecoderLayerBase(nn.Module):
 
         # AR added
         # print(f'  AR DB Before assigning mh sythn attn')
-        SENTENCE_LENGTH_HARDCODE = 512
+        SENTENCE_LENGTH_HARDCODE = 128 #512
         # self.multihead_synth_attn = multihead_synthesizer.SynthesizerDenseEinsumMH(self.embed_dim, cfg.decoder.ffn_embed_dim, self.nh) # Created (head_dim, in_dim, sent_len, heads) = [64,512,2048,8]
         self.multihead_template_attn = multihead_templates.TemplatesManualMH(self.embed_dim, SENTENCE_LENGTH_HARDCODE, self.nh) # Goal: create [64, 512, 512, 8]
         # print(f'  AR DB After assigning mh synth attn')
