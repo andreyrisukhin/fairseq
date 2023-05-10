@@ -395,6 +395,9 @@ def base_lm_architecture(args):
         args.checkpoint_activations = True
 
 
+    # This is the place to add command line arguments, take out hardcoded tokens-per-sample (in templates_mh.py, templates_layer.py) in favor of having command line arg
+
+
 @register_model_architecture("transformer_lm", "transformer_lm_big")
 def transformer_lm_big(args):
     args.decoder_layers = safe_getattr(args, "decoder_layers", 12)

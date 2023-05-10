@@ -48,7 +48,8 @@ class LMContextWindowDataset(FairseqDataset):
         return len(self.dataset)
 
     def collater(self, samples) -> Dict:
-        sample = self.dataset.collater(samples)
+        sample = self.dataset.collater(samples) # This handles padding @AR, check if it is doing what I expected (all are tokens-per-sample padded, or not?)
+        # Add an assert before feeding data into transformer, ensure length is my tokens-per-sample value
 
         pad = self.pad_idx
         max_sample_len = self.tokens_per_sample + self.context_window

@@ -400,6 +400,10 @@ from torch import empty
 
 import numpy as np
 
+
+import inspect # Andrey, for tracing where 33 came from
+
+
 class TemplatesManualMH(nn.Module):
     def __init__(self, in_dims, sentence_length, heads:int=1): 
         print(f'DB multihead_templates.py init got sent_len {sentence_length}')            
@@ -540,6 +544,7 @@ class TemplatesManualMH(nn.Module):
         HIDDEN_DIM = in_dims
         self.in_dims = in_dims
         self.seq_len = sentence_length
+        self.heads = heads
 
         ''' Weights and Biases for Multilayer Perceptron (linear -> relu/other activation) '''
         self.w0 = Parameter(xavier_uniform_(empty(heads, in_dims, HIDDEN_DIM,)))  # Linear 1 weights 
@@ -620,8 +625,30 @@ class TemplatesManualMH(nn.Module):
         # PYtorch full print
         # TODO SOFTMAX CONDITION VIOLATED?
 
+        # print(f'size {attnWeights.size()}, seq len {self.seq_len}, s is 1st dim of x {x.size()}')
+        # if x.size()[0] == 33 or x.size()[0] == 289:
+            
+        #     frame = inspect.currentframe()
+        #     try:
+        #         tb = inspect.getframeinfo(frame.f_back)
+        #         print(tb)
+        #     finally:
+        #         del frame
 
-        return attnWeights.contiguous().view((-1, self.seq_len, self.in_dims)) # TODO revisit why this and templates_mha.py have inconsistency
+            # arg_source_file = inspect.getsourcefile(x)
+            # arg_source_lines = inspect.getsourcelines(x)
+            
+
+        return attnWeights.contiguous().view((-1, self.seq_len, self.seq_len)) #self.in_dims)) # TODO revisit why this and templates_mha.py have inconsistency
+
+        """
+        srclen:= len of text attending to
+        tgtlen:= len of text attend from
+        lm, same; other applications not
+
+        Coupling here. srclen always == seqlen in our model, b/c must pad templates
+        
+        """
 
         # Calculate the value using attention and x
         # value = torch.einsum('sbd,hde->bhse', x, self.value_w) + self.value_b

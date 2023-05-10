@@ -309,6 +309,13 @@ class TransformerDecoderBase(FairseqIncrementalDecoder):
         prev_output_tokens = prev_output_tokens.contiguous()
         # embed tokens and positions
         x = self.embed_scale * self.embed_tokens(prev_output_tokens)
+        if x.size()[1] == 33 or x.size()[1] == 289: # pre transpose
+            print(f'templates_decoder.py x size {x.size()}')
+            print(f'self.embed_scale {self.embed_scale}')
+            print(f' type of embed tokens {type(self.embed_tokens)}')
+            print(f'type of prev output tokens {type(prev_output_tokens)}')
+            print(f'size prev output tokens {prev_output_tokens.size()}')
+
 
         if self.quant_noise is not None:
             x = self.quant_noise(x)
@@ -326,6 +333,9 @@ class TransformerDecoderBase(FairseqIncrementalDecoder):
 
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
+        # Andrey debug 289 seq len
+        if x.size()[0] == 33 or x.size()[0] == 289:
+            print(f'templates_decoder.py x size {x.size()}')
 
         self_attn_padding_mask: Optional[Tensor] = None
         if self.cross_self_attention or prev_output_tokens.eq(self.padding_idx).any():

@@ -168,8 +168,10 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         # === Andrey Template init Start ===
         # num_heads = self.num_heads
         embed_dim = self.embed_dim # I think --share-decoder-input-output-embed in the train command implies embed_dim is identical?
-        SENTENCE_LENGTH_HARDCODED = 128 #512 #64 # For 20 templates, needed smaller max-tokens, reflected in command
+        SENTENCE_LENGTH_HARDCODED = 512 #128 #512 #64 # For 20 templates, needed smaller max-tokens, reflected in command
         sentence_length = SENTENCE_LENGTH_HARDCODED # TODO get automatically? # 2048 failed an assertion after attn_weight computation. # command has --tokens-per-sample 512, --max-tokens 2048
+
+        # Adding as CLI 
 
         print(f'DB templates_mh_a.py using sent_len {sentence_length}')            
         self.template = TemplatesManualMH(in_dims=embed_dim, sentence_length=sentence_length, heads=num_heads)
@@ -394,8 +396,8 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
 
         tgt_len, bsz, embed_dim = query.size()
         # Andrey HARDCODING FOR TEMPLATES_20 wikitext
-        tgt_len = 128
-        src_len = 128
+        # tgt_len = 128
+        # src_len = 128
 
         if key_padding_mask is not None:
             assert key_padding_mask.size(0) == bsz
@@ -529,16 +531,17 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         is_tpu = query.device.type == "xla"
 
         tgt_len, bsz, embed_dim = query.size()
+        # print(f'templates_multihead_attention.py got query {query.size()}')
         # Andrey HARDCODING FOR TEMPLATES_20 wikitext
-        tgt_len = 128
-        src_len = 128
+        # tgt_len = 128
+        # src_len = 128
         # END of hardcoding
         src_len = tgt_len
         if not self.skip_embed_dim_check:
             assert (
                 embed_dim == self.embed_dim
             ), f"query dim {embed_dim} != {self.embed_dim}"
-        assert list(query.size()) == [tgt_len, bsz, embed_dim]
+        assert list(query.size()) == [tgt_len, bsz, embed_dim], f'got query size {list(query.size())}, got dims {[tgt_len, bsz, embed_dim]}'
         if key is not None:
             src_len, key_bsz, _ = key.size()
             if not torch.jit.is_scripting():
@@ -673,6 +676,14 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
 
         # print(f'AR s_mha.py')
         # attn_weights, v = self.template.forward(key)
+        # if key.size()[0] == 33 or key.size()[0] == 289:
+        #     frame = inspect.currentframe()
+        #     try:
+        #         tb = inspect.getframeinfo(frame.f_back)
+        #         print(tb)
+        #     finally:
+        #         del frame
+
         attn_weights = self.template.forward(key)
         attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz) # TODO this does nothing, semantic sugar?
 
