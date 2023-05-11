@@ -639,7 +639,10 @@ class TemplatesManualMH(nn.Module):
             # arg_source_lines = inspect.getsourcelines(x)
             
 
-        return attnWeights.contiguous().view((-1, self.seq_len, self.seq_len)) #self.in_dims)) # TODO revisit why this and templates_mha.py have inconsistency
+        return attnWeights.contiguous().view((-1, self.seq_len, self.in_dims)) #self.seq_len)) #self.in_dims)) # TODO revisit why this and templates_mha.py have inconsistency
+
+        # First thing to do: Bring back the self.in_dims, and observe the multiplication with the value vectors. With [-1,512,512], we should be seeing more bugs, if we are not there is something even more wrong
+
 
         """
         srclen:= len of text attending to
@@ -647,7 +650,7 @@ class TemplatesManualMH(nn.Module):
         lm, same; other applications not
 
         Coupling here. srclen always == seqlen in our model, b/c must pad templates
-        
+
         """
 
         # Calculate the value using attention and x

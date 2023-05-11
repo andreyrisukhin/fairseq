@@ -51,7 +51,7 @@ class LMContextWindowDataset(FairseqDataset):
         sample = self.dataset.collater(samples) # This handles padding @AR, check if it is doing what I expected (all are tokens-per-sample padded, or not?)
         # Add an assert before feeding data into transformer, ensure length is my tokens-per-sample value
 
-        pad = self.pad_idx
+        pad = self.pad_idx # ANDREY this is the class to extend for templates, to ensure padding is happening as we expect. 
         max_sample_len = self.tokens_per_sample + self.context_window
 
         bsz, tsz = sample["net_input"]["src_tokens"].shape
@@ -78,6 +78,9 @@ class LMContextWindowDataset(FairseqDataset):
         sample["net_input"]["src_tokens"] = torch.from_numpy(new_toks)
         sample["target"] = torch.from_numpy(new_tgt)
         sample["start_indices"] = start_idxs
+
+        # Start here, check len, pad if needed
+
         return sample
 
     def num_tokens(self, index):

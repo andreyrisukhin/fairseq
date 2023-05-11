@@ -305,6 +305,11 @@ class TransformerDecoderBase(FairseqIncrementalDecoder):
             if positions is not None:
                 positions = positions[:, -1:]
 
+        # TODO add assert for 512, such
+
+
+        # Principled way: create new class that inhereits from contextLMdataset, does almost the same stuff, just handles the prevoutputtokens slightly differently to ensure the padding we need happens
+
         # Prevent torchscript exporting issue for dynamic quant embedding
         prev_output_tokens = prev_output_tokens.contiguous()
         # embed tokens and positions
