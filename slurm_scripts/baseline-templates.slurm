@@ -5,12 +5,12 @@
 #SBATCH --nodes=1
 #SBATCH --account=ark
 #SBATCH --partition=gpu-2080ti
-#SBATCH --gpus=4 ## Make sure to change gpu count here and in below constant!
+#SBATCH --gpus=2 ## Make sure to change gpu count here and in below constant!
 #SBATCH --cpus-per-gpu=4
 ## Number of cores per node
 #SBATCH --ntasks-per-node=1
 ## Walltime (3 hours). Do not specify a walltime substantially more than your job needs.
-#SBATCH --time=5:00:00
+#SBATCH --time=6:00:00
 ## Memory per node. It is important to specify the memory since the default memory is very small.
 ## For mox, --mem may be more than 100G depending on the memory of your nodes.
 ## For ikt, --mem may be 58G or more depending on the memory of your nodes.
@@ -42,8 +42,10 @@
 
 # NUM_GPUS=1
 # DEVICE=0
-NUM_GPUS=4
-DEVICE=0,1,2,3 ##,2,3
+NUM_GPUS=2
+DEVICE=0,1
+# NUM_GPUS=4
+# DEVICE=0,1,2,3 ##,2,3
 DATA=wikitext-103-full #-full ##-ten-percent # IMPORTANT to change!
 
 export XDG_CACHE_HOME="/gscratch/ark/risuka/.cache"
@@ -76,8 +78,8 @@ fi
 
 UPDATE_FREQ=$(python -c "print(int(32//${FRAGS_PER_GPU}//${NUM_GPUS}*2))")
 BSZ=16 #32 #16
-TOKENS_PER_SAMPLE=128 #256 #512 # Constant to be comparable?
-MAX_TOKENS=$(python -c "print(int(${TOKENS_PER_SAMPLE}/${UPDATE_FREQ}/${NUM_GPUS}*${BSZ}/2))") # This adjust max tokens based on num GPUs to keep BSZ and tokens per sample constant. TODO there's a case where max tokens is calculated as less than 1, not int; would need to adjust update_freq in this case.
+TOKENS_PER_SAMPLE=64 #128 #256 #512 # Constant to be comparable?
+MAX_TOKENS=64 #$(python -c "print(int(${TOKENS_PER_SAMPLE}/${UPDATE_FREQ}/${NUM_GPUS}*${BSZ}/2))") # This adjust max tokens based on num GPUs to keep BSZ and tokens per sample constant. TODO there's a case where max tokens is calculated as less than 1, not int; would need to adjust update_freq in this case.
 ## Decreased MAX TOKENS by 2, thus increased update freq by two
 # Now just doing anything for it to fit into memory
 
@@ -103,7 +105,7 @@ echo "seed=$SEED"
 echo "BSZ=$BSZ TOKENS_PER_SAMPLE=$TOKENS_PER_SAMPLE NUM_GPUS=$NUM_GPUS MAX_TOKENS=$MAX_TOKENS UPDATE_FREQ=$UPDATE_FREQ"
 
 DATA_PATH=/gscratch/ark/risuka/wikitext/data-bin/${DATA}
-RUN_NAME=baseline-templates-20-softmaxed #currentcode #10%-templates-debug-apr3 ## Remember to update name! 
+RUN_NAME=baseline-templates-20-padded-run-1 #currentcode #10%-templates-debug-apr3 ## Remember to update name! 
 SAVE_DIR=/gscratch/ark/risuka/wikitext/checkpoints/${RUN_NAME}
 TBLOG_DIR=/gscratch/ark/risuka/wikitext/tblogs/${RUN_NAME}
 
@@ -139,4 +141,5 @@ fi
     --fp16 \
     --find-unused-parameters \
     --max-epoch 300 \
+    --pad-to-fixed-length \
     --tensorboard-logdir ${TBLOG_DIR}

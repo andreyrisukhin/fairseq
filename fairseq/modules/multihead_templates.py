@@ -503,7 +503,7 @@ class TemplatesManualMH(nn.Module):
         t_r1 = template_random(sentence_length, r=1)
         t_r2 = template_random(sentence_length, r=2)
         t_r50 = template_random(sentence_length, r=50)
-        t_r100 = template_random(sentence_length, r=100)
+        t_r10 = template_random(sentence_length, r=10)
         t_r15 = template_random(sentence_length, r=15)
         t_r20 = template_random(sentence_length, r=20)
         t_r25 = template_random(sentence_length, r=25)
@@ -511,14 +511,14 @@ class TemplatesManualMH(nn.Module):
         t_g1 = template_global(sentence_length, g=1)
         t_g3 = template_global(sentence_length, g=3)
         t_g50 = template_global(sentence_length, g=50)
-        t_g100 = template_global(sentence_length, g=100)
+        t_g10 = template_global(sentence_length, g=10)
         t_g15 = template_global(sentence_length, g=15)
         t_g20 = template_global(sentence_length, g=20)
         t_g25 = template_global(sentence_length, g=25)
 
         t_w3 = template_window(sentence_length, w=3)
         t_w50 = template_window(sentence_length, w=50)
-        t_w100 = template_window(sentence_length, w=100)
+        t_w10 = template_window(sentence_length, w=10)
         t_w15 = template_window(sentence_length, w=15)
         t_w20 = template_window(sentence_length, w=20)
         t_w25 = template_window(sentence_length, w=25)
@@ -532,9 +532,9 @@ class TemplatesManualMH(nn.Module):
         # self.templates = t4
         # self.templates = torch.cat((t4, t5), dim=0)
         self.templates = torch.cat((
-            t_r1, t_r2, t_r50, t_r100, t_r15, t_r20, t_r25,
-            t_g1, t_g3, t_g50, t_g100, t_g15, t_g20, t_g25,
-                  t_w3, t_w50, t_w100, t_w15, t_w20, t_w25,
+            t_r1, t_r2, t_r50, t_r10, t_r15, t_r20, t_r25,
+            t_g1, t_g3, t_g50, t_g10, t_g15, t_g20, t_g25,
+                  t_w3, t_w50, t_w10, t_w15, t_w20, t_w25,
         ), dim=0)
 
         head_dim = in_dims // heads 
@@ -639,7 +639,7 @@ class TemplatesManualMH(nn.Module):
             # arg_source_lines = inspect.getsourcelines(x)
             
 
-        return attnWeights.contiguous().view((-1, self.seq_len, self.in_dims)) #self.seq_len)) #self.in_dims)) # TODO revisit why this and templates_mha.py have inconsistency
+        return attnWeights.contiguous().view((-1, self.seq_len, self.seq_len)) #self.in_dims)) # TODO revisit why this and templates_mha.py have inconsistency
 
         # First thing to do: Bring back the self.in_dims, and observe the multiplication with the value vectors. With [-1,512,512], we should be seeing more bugs, if we are not there is something even more wrong
 

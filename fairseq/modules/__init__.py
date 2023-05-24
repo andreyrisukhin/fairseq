@@ -52,6 +52,7 @@ from .positional_encoding import (
 )
 from .synthesized_multihead_attention import SynthesizedMultiheadAttention
 from .templates_multihead_attention import TemplatesMultiheadAttention
+from .svd_multihead_attention import SVDMultiheadAttention
 
 __all__ = [
     "AdaptiveInput",

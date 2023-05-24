@@ -26,7 +26,7 @@ from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
 from fairseq.models.fairseq_incremental_decoder import FairseqIncrementalDecoder
 
-from fairseq.modules.multihead_templates import *
+from fairseq.modules.multihead_svd import *
 
 # TODO: move this into xformers?
 # TODO: uint8 input type should just output a bool
@@ -63,7 +63,7 @@ def _mask_for_xformers(mask: Tensor, to_dtype: Optional[torch.dtype] = None):
     return mask
 
 
-class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
+class SVDMultiheadAttention(FairseqIncrementalDecoder):
     """Multi-headed attention.
 
     See "Attention Is All You Need" for more details.
@@ -165,16 +165,16 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         self.skip_embed_dim_check = False
         self.init_incremental_state()
 
-        # === Andrey Template init Start ===
+        # === Andrey SVD init Start ===
         # num_heads = self.num_heads
         embed_dim = self.embed_dim # I think --share-decoder-input-output-embed in the train command implies embed_dim is identical?
-        SENTENCE_LENGTH_HARDCODED = 128 #64 #128 #512 #64 # For 20 templates, needed smaller max-tokens, reflected in command
+        SENTENCE_LENGTH_HARDCODED = 512 #64 #128 #512 #64 # Related to max-tokens command adjustments
         sentence_length = SENTENCE_LENGTH_HARDCODED # TODO get automatically? # 2048 failed an assertion after attn_weight computation. # command has --tokens-per-sample 512, --max-tokens 2048
 
         # Adding as CLI 
 
-        print(f'DB templates_mh_a.py using sent_len {sentence_length}')            
-        self.template = TemplatesManualMH(in_dims=embed_dim, sentence_length=sentence_length, heads=num_heads)
+        print(f'DB svd_mh_a.py using sent_len {sentence_length}')            
+        self.svd = SVDManualMH(in_dims=embed_dim, seq_len=sentence_length, heads=num_heads)
         # TODO readdress
         # === Andrey Synth init End ===
 
@@ -395,9 +395,6 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
     ) -> Tuple[Tensor, Optional[Tensor]]:
 
         tgt_len, bsz, embed_dim = query.size()
-        # Andrey HARDCODING FOR TEMPLATES_20 wikitext
-        # tgt_len = 128
-        # src_len = 128
 
         if key_padding_mask is not None:
             assert key_padding_mask.size(0) == bsz
@@ -497,7 +494,6 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         attn_mask: Optional[Tensor] = None,
         before_softmax: bool = False,
         need_head_weights: bool = False,
-        AR_template_mode: bool = False, # Added by Andrey for extension
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time x Batch x Channel
 
@@ -521,9 +517,6 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         #   x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
         # query, key, value all share values, shape of [512, 4, 512], [seq_len, batch, embed_dim]
 
-        AR_template_mode = True # For debug of Template implementation
-        # AR_TEMPLATE_MODE = False
-
         # Default implementation by Fairseq
         if need_head_weights:
             need_weights = True
@@ -531,11 +524,6 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         is_tpu = query.device.type == "xla"
 
         tgt_len, bsz, embed_dim = query.size()
-        # print(f'templates_multihead_attention.py got query {query.size()}')
-        # Andrey HARDCODING FOR TEMPLATES_20 wikitext
-        # tgt_len = 128
-        # src_len = 128
-        # END of hardcoding
         src_len = tgt_len
         if not self.skip_embed_dim_check:
             assert (
@@ -674,17 +662,7 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
 
         # ===== End Large Chunk
 
-        # print(f'AR s_mha.py')
-        # attn_weights, v = self.template.forward(key)
-        # if key.size()[0] == 33 or key.size()[0] == 289:
-        #     frame = inspect.currentframe()
-        #     try:
-        #         tb = inspect.getframeinfo(frame.f_back)
-        #         print(tb)
-        #     finally:
-        #         del frame
-
-        attn_weights = self.template.forward(key)
+        attn_weights = self.svd.forward(key)
         attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz) # TODO this does nothing, semantic sugar?
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len], f'attn weight size {attn_weights.size()}, but expected {[bsz * self.num_heads, tgt_len, src_len]}'
@@ -718,7 +696,6 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
             # Roughly: (1) unpack to batches, unpack to kv_bsz, bool (TODO) -> value (-inf), repack.
 
-        # TODO check what this means and whether it triggers, template definitely outputs softmaxed weights.
         if before_softmax:
             return attn_weights, v
 
