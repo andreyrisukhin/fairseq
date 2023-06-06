@@ -168,7 +168,7 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
         # === Andrey Template init Start ===
         # num_heads = self.num_heads
         embed_dim = self.embed_dim # I think --share-decoder-input-output-embed in the train command implies embed_dim is identical?
-        SENTENCE_LENGTH_HARDCODED = 128 #64 #128 #512 #64 # For 20 templates, needed smaller max-tokens, reflected in command
+        SENTENCE_LENGTH_HARDCODED = 512# 128 #64 #128 #512 #64 # For 20 templates, needed smaller max-tokens, reflected in command
         sentence_length = SENTENCE_LENGTH_HARDCODED # TODO get automatically? # 2048 failed an assertion after attn_weight computation. # command has --tokens-per-sample 512, --max-tokens 2048
 
         # Adding as CLI 
