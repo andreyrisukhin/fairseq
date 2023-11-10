@@ -7,7 +7,21 @@ from torch import empty
 
 import numpy as np
 
+
+# Checkpoint loading imports below, for SVD
+from fairseq import checkpoint_utils
+
+
 class SVDManualMH(nn.Module):
+    # Loads a model checkpoint, returns its attn matrix's svd representation for rank k.
+    def import_checkpoint(self, checkpath:str, k:int=1):
+        # checkpoint_utils.torch_persistent_save()
+        PATH_FROM_HERE_TO_CKPT = '../wikitext/checkpoints/'
+        CHECKPOINT_TO_LOAD = 'baseline_def_2/checkpoint_best.pt'
+        sd = torch.load(PATH_FROM_HERE_TO_CKPT + CHECKPOINT_TO_LOAD)
+    
+    # https://github.com/facebookresearch/fairseq/issues/4664
+    
     def __init__(self, in_dims, seq_len, heads:int=1, num_singulars:int=6): 
         ''' Parameters:
             in_dims: dimension of input representation (512)

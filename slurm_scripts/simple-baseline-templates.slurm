@@ -106,7 +106,8 @@ else
     mkdir -p $SAVE_DIR
 fi
 
-/mmfs1/gscratch/ark/risuka/miniconda/envs/dev/bin/python \
+
+echo "/mmfs1/gscratch/ark/risuka/miniconda/envs/dev/bin/python \
 /gscratch/ark/risuka/efftr/fairseq/fairseq_cli/train.py \
     ${DATA_PATH} \
     --task language_modeling \
@@ -133,4 +134,4 @@ fi
     --find-unused-parameters \
     --max-epoch 300 \
     --tensorboard-logdir ${TBLOG_DIR} \
-    --pad-to-fixed-length
+    --pad-to-fixed-length"

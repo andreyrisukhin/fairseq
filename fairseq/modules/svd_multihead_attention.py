@@ -123,6 +123,10 @@ class SVDMultiheadAttention(FairseqIncrementalDecoder):
             "Self-attention requires query, key and " "value to be of the same size"
         )
 
+
+        # The following should be loaded from checkpoints instead
+        # TODO help, how to load per layer? ckpt has layers 1-5, how do I know which to load when?
+        # //////
         self.k_proj = quant_noise(
             nn.Linear(self.kdim, embed_dim, bias=bias), q_noise, qn_block_size
         )
@@ -136,6 +140,9 @@ class SVDMultiheadAttention(FairseqIncrementalDecoder):
         self.out_proj = quant_noise(
             nn.Linear(embed_dim, embed_dim, bias=bias), q_noise, qn_block_size
         )
+        # //////
+
+        # TODO ensure this is only used for eval, 
 
         if add_bias_kv:
             self.bias_k = Parameter(torch.Tensor(1, 1, embed_dim))

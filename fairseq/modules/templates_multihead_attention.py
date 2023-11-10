@@ -689,6 +689,9 @@ class TemplatesMultiheadAttention(FairseqIncrementalDecoder):
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len], f'attn weight size {attn_weights.size()}, but expected {[bsz * self.num_heads, tgt_len, src_len]}'
 
+        # Default has         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
+
+
         if attn_mask is not None:
             attn_mask = attn_mask.unsqueeze(0)
             # if self.onnx_trace:
